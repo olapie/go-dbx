@@ -8,11 +8,10 @@ import (
 	"reflect"
 	"strings"
 
+	"code.olapie.com/log"
 	"code.olapie.com/sugar/naming"
 	"code.olapie.com/sugar/rtx"
 	"code.olapie.com/sugar/sqlx"
-
-	"code.olapie.com/log"
 	"github.com/jinzhu/inflection"
 )
 

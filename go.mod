@@ -5,7 +5,6 @@ go 1.19
 require (
 	code.olapie.com/log v1.0.2
 	code.olapie.com/sugar v1.3.2
-	github.com/go-sql-driver/mysql v1.6.0
 	github.com/golang/protobuf v1.5.2
 	github.com/jinzhu/inflection v1.0.0
 	github.com/lib/pq v1.10.7
