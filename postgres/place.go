@@ -5,8 +5,9 @@ import (
 	"database/sql/driver"
 	"fmt"
 
-	"code.olapie.com/conv"
-	"code.olapie.com/types"
+	"code.olapie.com/sugar/sqlx"
+
+	"code.olapie.com/sugar/types"
 )
 
 var (
@@ -76,5 +77,5 @@ func (pv *placeValuer) Value() (driver.Value, error) {
 	fields := []string{pv.v.Code, pv.v.Name}
 	locStr, _ := loc.(string)
 	fields = append(fields, locStr)
-	return conv.ToPSQLCompositeString(fields), nil
+	return sqlx.ToPSQLCompositeString(fields), nil
 }

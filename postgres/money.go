@@ -5,7 +5,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 
-	"code.olapie.com/types"
+	"code.olapie.com/sugar/types"
 )
 
 var (

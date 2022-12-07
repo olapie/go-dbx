@@ -8,9 +8,11 @@ import (
 	"reflect"
 	"strings"
 
-	"code.olapie.com/conv"
+	"code.olapie.com/sugar/naming"
+	"code.olapie.com/sugar/rtx"
+	"code.olapie.com/sugar/sqlx"
+
 	"code.olapie.com/log"
-	"code.olapie.com/types"
 	"github.com/jinzhu/inflection"
 )
 
@@ -59,7 +61,7 @@ func getTableNameByType(typ reflect.Type) string {
 		//return reflect.Zero(reflect.PtrTo(typ)).Interface().(tableNaming).TableName()
 	}
 
-	return inflection.Plural(conv.ToSnake(typ.Name()))
+	return inflection.Plural(naming.ToSnake(typ.Name()))
 }
 
 type Table struct {
@@ -321,7 +323,7 @@ func (t *Table) Select(records any, where string, args ...any) error {
 	sliceValue := v.Elem()
 	fields := make([]any, len(fi.indexes))
 	for rows.Next() {
-		ptrToElem := types.DeepNew(elemType)
+		ptrToElem := rtx.DeepNew(elemType)
 		elem := ptrToElem.Elem()
 		for i, idx := range fi.indexes {
 			if IndexOfString(fi.jsonNames, fi.names[i]) >= 0 {
@@ -411,7 +413,7 @@ func (t *Table) SelectOne(record any, where string, args ...any) error {
 	}
 
 	//Store result in ev. If failed, don't change record's value
-	ev := types.DeepNew(rv.Elem().Type()).Elem()
+	ev := rtx.DeepNew(rv.Elem().Type()).Elem()
 	elem := ev
 	if elem.Kind() == reflect.Ptr {
 		elem = elem.Elem()
@@ -446,13 +448,13 @@ func (t *Table) SelectOne(record any, where string, args ...any) error {
 		} else if IndexOfString(info.nullableNames, info.names[i]) >= 0 {
 			field := elem.FieldByIndex(idx)
 			switch {
-			case conv.IsIntValue(field), conv.IsUintValue(field):
+			case rtx.IsInt(field), rtx.IsUint(field):
 				var v sql.NullInt64
 				fieldAddrs[i] = &v
 			case field.Kind() == reflect.Bool:
 				var b sql.NullBool
 				fieldAddrs[i] = &b
-			case conv.IsFloatValue(field):
+			case rtx.IsFloat(field):
 				var v sql.NullFloat64
 				fieldAddrs[i] = &v
 			case field.Kind() == reflect.String:
@@ -583,7 +585,7 @@ func (t *Table) getFieldValueByName(item reflect.Value, info *columnInfo, name s
 			return nil, err
 		}
 
-		if IndexOfString(info.nullableNames, name) >= 0 && conv.IsSQLNullValue(string(data)) {
+		if IndexOfString(info.nullableNames, name) >= 0 && sqlx.IsSQLNullValue(string(data)) {
 			return nil, nil
 		} else {
 			return data, nil

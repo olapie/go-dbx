@@ -7,7 +7,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"code.olapie.com/conv"
+	"code.olapie.com/sugar/naming"
 )
 
 var _regexpVariable = regexp.MustCompile("^[_a-zA-Z]\\w*$")
@@ -133,7 +133,7 @@ func parseColumnInfo(typ reflect.Type) *columnInfo {
 		}
 
 		if len(name) == 0 {
-			name = conv.ToSnake(f.Name)
+			name = naming.ToSnake(f.Name)
 		}
 
 		if idx, found := info.nameToIndex[name]; found {

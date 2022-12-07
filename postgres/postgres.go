@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 
-	"code.olapie.com/types"
+	"code.olapie.com/sugar/types"
 )
 
 type supportedTypes interface {

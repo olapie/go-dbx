@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"code.olapie.com/types"
+	"code.olapie.com/sugar/types"
 )
 
 type pointScanner struct {

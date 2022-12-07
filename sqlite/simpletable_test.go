@@ -4,9 +4,10 @@ import (
 	"database/sql"
 	"testing"
 
-	"code.olapie.com/errors"
+	"errors"
+
 	"code.olapie.com/sqlx/sqlite"
-	"code.olapie.com/types"
+	"code.olapie.com/sugar/types"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 )

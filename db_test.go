@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"code.olapie.com/sqlx"
-	"code.olapie.com/types"
+	"code.olapie.com/sugar/types"
 	_ "github.com/go-sql-driver/mysql"
 )
 
