@@ -2,28 +2,37 @@ package sqlite
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"go.olapie.com/conv"
+	"go.olapie.com/dbx/sqlutil"
+	"go.olapie.com/security"
+	"go.olapie.com/times"
 	"reflect"
 	"sync"
-	"time"
-
-	"code.olapie.com/sqlx"
 )
 
-type PrimaryKey[T IntOrString] interface {
+type SimpleTableRecord[T SimpleKey] interface {
 	PrimaryKey() T
 }
 
-type IntOrString interface {
+type SimpleTableOptions[K SimpleKey, R SimpleTableRecord[K]] struct {
+	Clock         times.Clock
+	MarshalFunc   func(r R) ([]byte, error)
+	UnmarshalFunc func(data []byte, r *R) error
+	Password      string
+}
+
+type SimpleKey interface {
 	int | int32 | int64 | string
 }
 
-type SimpleTable[K IntOrString, M PrimaryKey[K]] struct {
-	name     string
-	db       *sql.DB
-	mu       sync.RWMutex
-	newModel func() M
-	stmts    struct {
+type SimpleTable[K SimpleKey, R SimpleTableRecord[K]] struct {
+	options SimpleTableOptions[K, R]
+	name    string
+	db      *sql.DB
+	mu      sync.RWMutex
+	stmts   struct {
 		insert            *sql.Stmt
 		update            *sql.Stmt
 		save              *sql.Stmt
@@ -35,10 +44,9 @@ type SimpleTable[K IntOrString, M PrimaryKey[K]] struct {
 		deleteGreaterThan *sql.Stmt
 		deleteLessThan    *sql.Stmt
 	}
-	Now Clock
 }
 
-func NewSimpleTable[K IntOrString, M PrimaryKey[K]](db *sql.DB, name string, newModel func() M) (*SimpleTable[K, M], error) {
+func NewSimpleTable[K SimpleKey, R SimpleTableRecord[K]](db *sql.DB, name string, optFns ...func(options *SimpleTableOptions[K, R])) (*SimpleTable[K, R], error) {
 	var zero K
 	var typ string
 	if reflect.ValueOf(zero).Kind() == reflect.String {
@@ -57,66 +65,66 @@ updated_at BIGINT
 		return nil, err
 	}
 
-	t := &SimpleTable[K, M]{
-		name:     name,
-		db:       db,
-		newModel: newModel,
+	t := &SimpleTable[K, R]{
+		name: name,
+		db:   db,
 	}
 
-	t.stmts.insert = sqlx.MustPrepare(db, `INSERT INTO %s(id,data,updated_at) VALUES(?,?,?)`, name)
-	t.stmts.update = sqlx.MustPrepare(db, `UPDATE %s SET data=?,updated_at=? WHERE id=?`, name)
-	t.stmts.save = sqlx.MustPrepare(db, `REPLACE INTO %s(id,data,updated_at) VALUES(?,?,?)`, name)
-	t.stmts.get = sqlx.MustPrepare(db, `SELECT data FROM %s WHERE id=?`, name)
-	t.stmts.listAll = sqlx.MustPrepare(db, `SELECT data FROM %s`, name)
-	t.stmts.listGreaterThan = sqlx.MustPrepare(db, `SELECT data FROM %s WHERE id>? ORDER BY id ASC LIMIT ?`, name)
-	t.stmts.listLessThan = sqlx.MustPrepare(db, `SELECT data FROM %s WHERE id<? ORDER BY id DESC LIMIT ?`, name)
-	t.stmts.delete = sqlx.MustPrepare(db, `DELETE FROM %s WHERE id=?`, name)
-	t.stmts.deleteGreaterThan = sqlx.MustPrepare(db, `DELETE FROM %s WHERE id>?`, name)
-	t.stmts.deleteLessThan = sqlx.MustPrepare(db, `DELETE FROM %s WHERE id<?`, name)
+	for _, fn := range optFns {
+		fn(&t.options)
+	}
+
+	if t.options.Clock == nil {
+		t.options.Clock = times.LocalClock{}
+	}
+
+	t.stmts.insert = sqlutil.MustPrepare(db, `INSERT INTO %s(id,data,updated_at) VALUES(?,?,?)`, name)
+	t.stmts.update = sqlutil.MustPrepare(db, `UPDATE %s SET data=?,updated_at=? WHERE id=?`, name)
+	t.stmts.save = sqlutil.MustPrepare(db, `REPLACE INTO %s(id,data,updated_at) VALUES(?,?,?)`, name)
+	t.stmts.get = sqlutil.MustPrepare(db, `SELECT data FROM %s WHERE id=?`, name)
+	t.stmts.listAll = sqlutil.MustPrepare(db, `SELECT id,data FROM %s ORDER BY updated_at`, name)
+	t.stmts.listGreaterThan = sqlutil.MustPrepare(db, `SELECT id,data FROM %s WHERE id>? ORDER BY id ASC LIMIT ?`, name)
+	t.stmts.listLessThan = sqlutil.MustPrepare(db, `SELECT id,data FROM %s WHERE id<? ORDER BY id DESC LIMIT ?`, name)
+	t.stmts.delete = sqlutil.MustPrepare(db, `DELETE FROM %s WHERE id=?`, name)
+	t.stmts.deleteGreaterThan = sqlutil.MustPrepare(db, `DELETE FROM %s WHERE id>?`, name)
+	t.stmts.deleteLessThan = sqlutil.MustPrepare(db, `DELETE FROM %s WHERE id<?`, name)
 	return t, nil
 }
 
-func (t *SimpleTable[K, M]) now() int64 {
-	if t.Now != nil {
-		return t.Now.Now().Unix()
-	}
-	return time.Now().Unix()
-}
-
-func (t *SimpleTable[K, M]) Insert(v PrimaryKey[K]) error {
+func (t *SimpleTable[K, R]) Insert(v SimpleTableRecord[K]) error {
 	t.mu.Lock()
-	_, err := t.stmts.insert.Exec(v.PrimaryKey(), sqlx.JSON(v), t.now())
+	_, err := t.stmts.insert.Exec(v.PrimaryKey(), sqlutil.JSON(v), t.options.Clock.Now())
 	t.mu.Unlock()
 	return err
 }
 
-func (t *SimpleTable[K, M]) Update(v PrimaryKey[K]) error {
+func (t *SimpleTable[K, R]) Update(v SimpleTableRecord[K]) error {
 	t.mu.Lock()
-	_, err := t.stmts.update.Exec(v.PrimaryKey(), sqlx.JSON(v), t.now())
+	_, err := t.stmts.update.Exec(v.PrimaryKey(), sqlutil.JSON(v), t.options.Clock.Now())
 	t.mu.Unlock()
 	return err
 }
 
-func (t *SimpleTable[K, M]) Save(v PrimaryKey[K]) error {
+func (t *SimpleTable[K, R]) Save(v SimpleTableRecord[K]) error {
 	t.mu.Lock()
-	_, err := t.stmts.save.Exec(v.PrimaryKey(), sqlx.JSON(v), t.now())
+	_, err := t.stmts.save.Exec(v.PrimaryKey(), sqlutil.JSON(v), t.options.Clock.Now())
 	t.mu.Unlock()
 	return err
 }
 
-func (t *SimpleTable[K, M]) Get(key K) (M, error) {
+func (t *SimpleTable[K, R]) Get(key K) (R, error) {
+	var data []byte
 	t.mu.RLock()
-	var zero M
-	m := t.newModel()
-	err := t.stmts.get.QueryRow(key).Scan(sqlx.JSON(m))
+	err := t.stmts.get.QueryRow(key).Scan(&data)
 	t.mu.RUnlock()
 	if err != nil {
+		var zero R
 		return zero, err
 	}
-	return m, err
+	return t.decode(key, data)
 }
 
-func (t *SimpleTable[K, M]) ListAll() ([]M, error) {
+func (t *SimpleTable[K, R]) ListAll() ([]R, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	rows, err := t.stmts.listAll.Query()
@@ -127,7 +135,7 @@ func (t *SimpleTable[K, M]) ListAll() ([]M, error) {
 	return t.readList(rows)
 }
 
-func (t *SimpleTable[K, M]) ListGreaterThan(key K, limit int) ([]M, error) {
+func (t *SimpleTable[K, R]) ListGreaterThan(key K, limit int) ([]R, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	rows, err := t.stmts.listGreaterThan.Query(key, limit)
@@ -138,7 +146,7 @@ func (t *SimpleTable[K, M]) ListGreaterThan(key K, limit int) ([]M, error) {
 	return t.readList(rows)
 }
 
-func (t *SimpleTable[K, M]) ListLessThan(key K, limit int) ([]M, error) {
+func (t *SimpleTable[K, R]) ListLessThan(key K, limit int) ([]R, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	rows, err := t.stmts.listLessThan.Query(key, limit)
@@ -157,11 +165,16 @@ func (t *SimpleTable[K, M]) ListLessThan(key K, limit int) ([]M, error) {
 	return l, nil
 }
 
-func (t *SimpleTable[K, M]) readList(rows *sql.Rows) ([]M, error) {
-	var l []M
+func (t *SimpleTable[K, R]) readList(rows *sql.Rows) ([]R, error) {
+	var l []R
+	var data []byte
+	var key K
 	for rows.Next() {
-		var v M
-		err := rows.Scan(sqlx.JSON(&v))
+		err := rows.Scan(&key, &data)
+		if err != nil {
+			return nil, err
+		}
+		v, err := t.decode(key, data)
 		if err != nil {
 			return nil, err
 		}
@@ -170,17 +183,64 @@ func (t *SimpleTable[K, M]) readList(rows *sql.Rows) ([]M, error) {
 	return l, nil
 }
 
-func (t *SimpleTable[K, M]) Delete(key K) error {
+func (t *SimpleTable[K, R]) Delete(key K) error {
+	t.mu.Lock()
 	_, err := t.stmts.delete.Exec(key)
+	t.mu.Unlock()
 	return err
 }
 
-func (t *SimpleTable[K, M]) DeleteGreaterThan(key K) error {
+func (t *SimpleTable[K, R]) DeleteGreaterThan(key K) error {
+	t.mu.Lock()
 	_, err := t.stmts.deleteGreaterThan.Exec(key)
+	t.mu.Unlock()
 	return err
 }
 
-func (t *SimpleTable[K, M]) DeleteLessThan(key K) error {
+func (t *SimpleTable[K, R]) DeleteLessThan(key K) error {
+	t.mu.Lock()
 	_, err := t.stmts.deleteLessThan.Exec(key)
+	t.mu.Unlock()
 	return err
+}
+
+func (t *SimpleTable[K, R]) encode(key K, r R) (data []byte, err error) {
+	if t.options.MarshalFunc != nil {
+		data, err = t.options.MarshalFunc(r)
+	} else {
+		data, err = conv.Marshal(r)
+		if err != nil {
+			data, err = json.Marshal(r)
+		}
+	}
+
+	if err != nil {
+		return
+	}
+
+	if t.options.Password == "" {
+		return
+	}
+
+	return security.Encrypt(data, t.options.Password+fmt.Sprint(key))
+}
+
+func (t *SimpleTable[K, R]) decode(key K, data []byte) (record R, err error) {
+	if t.options.Password != "" {
+		data, err = security.Decrypt(data, t.options.Password+fmt.Sprint(key))
+		if err != nil {
+			return
+		}
+	}
+
+	if t.options.UnmarshalFunc != nil {
+		err := t.options.UnmarshalFunc(data, &record)
+		return record, err
+	}
+
+	err = conv.Unmarshal(data, &record)
+	if err != nil {
+		err = json.Unmarshal(data, &record)
+	}
+	return
 }

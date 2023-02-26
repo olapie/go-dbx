@@ -1,4 +1,4 @@
-package sqlx
+package sqlutil
 
 import (
 	"database/sql"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"code.olapie.com/sugar/conv"
+	"go.olapie.com/conv"
 )
 
 type BigInt big.Int

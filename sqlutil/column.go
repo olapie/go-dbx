@@ -1,4 +1,4 @@
-package sqlx
+package sqlutil
 
 import (
 	"reflect"
@@ -7,7 +7,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"code.olapie.com/sugar/naming"
+	"go.olapie.com/conv"
 )
 
 var _regexpVariable = regexp.MustCompile("^[_a-zA-Z]\\w*$")
@@ -133,7 +133,7 @@ func parseColumnInfo(typ reflect.Type) *columnInfo {
 		}
 
 		if len(name) == 0 {
-			name = naming.ToSnake(f.Name)
+			name = conv.ToSnake(f.Name)
 		}
 
 		if idx, found := info.nameToIndex[name]; found {

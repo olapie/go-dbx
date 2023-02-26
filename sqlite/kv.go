@@ -2,38 +2,36 @@ package sqlite
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
-	"code.olapie.com/log"
-	sqlx "code.olapie.com/sqlx"
-	"code.olapie.com/sugar/conv"
-	"github.com/golang/protobuf/proto"
+	"go.olapie.com/conv"
+	"go.olapie.com/times"
 )
 
-type Clock interface {
-	Now() time.Time
+type KVTableOptions struct {
+	Clock times.Clock
 }
 
-type KVStore struct {
-	ID       any
-	clock    Clock
-	db       *sql.DB
-	mu       sync.RWMutex
-	filename string
+type KVTable struct {
+	options KVTableOptions
+	db      *sql.DB
+	mu      sync.RWMutex
+	name    string
 }
 
-func NewKVStore(filename string, clock Clock) *KVStore {
-	db := Open(filename)
-	r := &KVStore{
-		clock:    clock,
-		db:       db,
-		filename: filename,
+func NewKVTable(db *sql.DB, optFns ...func(options *KVTableOptions)) *KVTable {
+	r := &KVTable{
+		db: db,
 	}
 
-	if r.clock == nil {
-		r.clock = localClock{}
+	for _, fn := range optFns {
+		fn(&r.options)
+	}
+
+	if r.options.Clock == nil {
+		r.options.Clock = times.LocalClock{}
 	}
 
 	_, err := db.Exec(`
@@ -43,30 +41,24 @@ v BLOB NOT NULL,
 updated_at BIGINT NOT NULL
 )`)
 	if err != nil {
-		log.G().Fatal("cannot create table", log.Error(err))
+		panic(err)
 	}
 	return r
 }
 
-func (s *KVStore) Filename() string {
-	return s.filename
+func (t *KVTable) SaveInt64(key string, val int64) error {
+	t.mu.Lock()
+	_, err := t.db.Exec("REPLACE INTO kv(k,v,updated_at) VALUES(?1,?2,?3)",
+		key, fmt.Sprint(val), t.options.Clock.Now())
+	t.mu.Unlock()
+	return err
 }
 
-func (s *KVStore) SaveInt64(key string, val int64) {
-	s.mu.Lock()
-	_, err := s.db.Exec("REPLACE INTO kv(k,v,updated_at) VALUES(?1,?2,?3)",
-		key, fmt.Sprint(val), s.clock.Now())
-	s.mu.Unlock()
-	if err != nil {
-		log.G().Error("exec", log.String("key", key), log.Int64("value", val), log.Error(err))
-	}
-}
-
-func (s *KVStore) GetInt64(key string) (int64, error) {
+func (t *KVTable) Int64(key string) (int64, error) {
 	var v string
-	s.mu.RLock()
-	err := s.db.QueryRow("SELECT v FROM kv WHERE k=?", key).Scan(&v)
-	s.mu.RUnlock()
+	t.mu.RLock()
+	err := t.db.QueryRow("SELECT v FROM kv WHERE k=?", key).Scan(&v)
+	t.mu.RUnlock()
 	if err != nil {
 		return 0, err
 	}
@@ -78,95 +70,132 @@ func (s *KVStore) GetInt64(key string) (int64, error) {
 	return n, nil
 }
 
-func (s *KVStore) SaveData(key string, data []byte) {
-	s.mu.Lock()
-	_, err := s.db.Exec("REPLACE INTO kv(k,v,updated_at) VALUES(?1,?2,?3)", key, data, s.clock.Now())
-	s.mu.Unlock()
-	if err != nil {
-		log.G().Error("exec", log.String("key", key), log.Error(err))
-	}
+func (t *KVTable) SaveString(key string, str string) error {
+	return t.SaveBytes(key, []byte(str))
 }
 
-func (s *KVStore) GetData(key string) ([]byte, error) {
-	var v []byte
-	s.mu.RLock()
-	err := s.db.QueryRow("SELECT v FROM kv WHERE k=?", key).Scan(&v)
-	s.mu.RUnlock()
-	if err != nil {
-		return nil, fmt.Errorf("query: %w", err)
-	}
-	return v, nil
-}
-
-func (s *KVStore) SaveString(key string, str string) {
-	s.SaveData(key, []byte(str))
-}
-
-func (s *KVStore) GetString(key string) (string, error) {
-	data, err := s.GetData(key)
+func (t *KVTable) String(key string) (string, error) {
+	data, err := t.Bytes(key)
 	if err != nil {
 		return "", err
 	}
 	return string(data), nil
 }
 
-func (s *KVStore) SavePB(key string, msg proto.Message) {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		log.G().Error("marshal", log.String("key", key), log.Error(err))
-		return
-	}
-	s.mu.Lock()
-	_, err = s.db.Exec("REPLACE INTO kv(k,v,updated_at) VALUES(?1,?2,?3)", key, data, s.clock.Now())
-	s.mu.Unlock()
-	if err != nil {
-		log.G().Error("exec", log.String("key", key), log.Error(err))
-	}
+func (t *KVTable) SaveBytes(key string, data []byte) error {
+	t.mu.Lock()
+	_, err := t.db.Exec("REPLACE INTO kv(k,v,updated_at) VALUES(?1,?2,?3)", key, data, t.options.Clock.Now())
+	t.mu.Unlock()
+	return err
 }
 
-func (s *KVStore) GetPB(key string, msg proto.Message) error {
+func (t *KVTable) Bytes(key string) ([]byte, error) {
 	var v []byte
-	s.mu.RLock()
-	err := s.db.QueryRow("SELECT v FROM kv WHERE k=?", key).Scan(&v)
-	s.mu.RUnlock()
+	t.mu.RLock()
+	err := t.db.QueryRow("SELECT v FROM kv WHERE k=?", key).Scan(&v)
+	t.mu.RUnlock()
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+	return v, nil
+}
+
+func (t *KVTable) SaveObject(key string, obj any) error {
+	data, err := t.encode(obj)
 	if err != nil {
 		return err
 	}
-	return proto.Unmarshal(v, msg)
-}
-
-func (s *KVStore) SaveJSON(key string, obj any) {
-	v := sqlx.JSON(obj)
-	s.mu.Lock()
-	var err error
-	if v == nil {
-		_, err = s.db.Exec("DELETE FROM kv WHERE k=?1", key)
+	t.mu.Lock()
+	if obj == nil {
+		_, err = t.db.Exec("DELETE FROM kv WHERE k=?1", key)
 	} else {
-		_, err = s.db.Exec("REPLACE INTO kv(k,v,updated_at) VALUES(?1,?2,?3)", key, v, s.clock.Now())
+		_, err = t.db.Exec("REPLACE INTO kv(k,v,updated_at) VALUES(?1,?2,?3)", key, data, t.options.Clock.Now())
 	}
-	s.mu.Unlock()
+	t.mu.Unlock()
+	return err
+}
+
+func (t *KVTable) GetObject(key string, ptrToObj any) error {
+	var data []byte
+	t.mu.RLock()
+	err := t.db.QueryRow("SELECT v FROM kv WHERE k=?", key).Scan(&data)
+	t.mu.RUnlock()
 	if err != nil {
-		log.G().Error("exec", log.String("key", key), log.Error(err))
+		return err
 	}
+	return t.decode(data, ptrToObj)
 }
 
-func (s *KVStore) GetJSON(key string, ptrToObj any) error {
-	s.mu.RLock()
-	err := s.db.QueryRow("SELECT v FROM kv WHERE k=?", key).Scan(sqlx.JSON(ptrToObj))
-	s.mu.RUnlock()
+func (t *KVTable) ListKeys(prefix string) ([]string, error) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	query := "SELECT k FROM kv"
+	if prefix != "" {
+		query = "SELECT k FROM kv WHERE k LIKE '" + prefix + "%'"
+	}
+	rows, err := t.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed executing %s: %w", query, err)
+	}
+	defer rows.Close()
+	var keys []string
+	for rows.Next() {
+		var key string
+		err = rows.Scan(&key)
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, key)
+	}
+	return keys, nil
+}
+
+func (t *KVTable) Delete(key string) error {
+	t.mu.Lock()
+	_, err := t.db.Exec("DELETE FROM kv WHERE k=?", key)
+	t.mu.Unlock()
 	return err
 }
 
-func (s *KVStore) Close() error {
-	s.mu.Lock()
-	err := s.db.Close()
-	s.mu.Unlock()
+func (t *KVTable) DeleteWithPrefix(prefix string) error {
+	t.mu.Lock()
+	_, err := t.db.Exec("DELETE FROM kv WHERE k like '" + prefix + "%'")
+	t.mu.Unlock()
 	return err
 }
 
-type localClock struct {
+func (t *KVTable) Exists(key string) (bool, error) {
+	t.mu.RLock()
+	var exists bool
+	err := t.db.QueryRow("SELECT EXISTS(SELECT * FROM kv WHERE k=?)", key).Scan(&exists)
+	t.mu.RUnlock()
+	return exists, err
 }
 
-func (l localClock) Now() time.Time {
-	return time.Now()
+func (t *KVTable) Close() error {
+	if t.db == nil {
+		return nil
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.db != nil {
+		return t.db.Close()
+	}
+	return nil
+}
+
+func (t *KVTable) encode(obj any) ([]byte, error) {
+	data, err := conv.Marshal(obj)
+	if err != nil {
+		return json.Marshal(obj)
+	}
+	return data, nil
+}
+
+func (t *KVTable) decode(data []byte, ptrToObj any) error {
+	err := conv.Unmarshal(data, ptrToObj)
+	if err != nil {
+		err = json.Unmarshal(data, ptrToObj)
+	}
+	return err
 }

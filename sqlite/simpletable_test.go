@@ -1,25 +1,25 @@
-package sqlite_test
+package sqlite
 
 import (
 	"database/sql"
+	"errors"
 	"testing"
 
-	"errors"
-
-	"code.olapie.com/sqlx/sqlite"
-	"code.olapie.com/sugar/types"
+	"code.olapie.com/sugar/v2/testutil"
+	"code.olapie.com/sugar/v2/types"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/stretchr/testify/require"
 )
 
-func createTable[K sqlite.IntOrString, M sqlite.PrimaryKey[K]](t *testing.T, name string, newModel func() M) *sqlite.SimpleTable[K, M] {
+func createTable[K SimpleKey, R SimpleTableRecord[K]](t *testing.T, name string) *SimpleTable[K, R] {
+	t.Log("createTable")
+
 	db, err := sql.Open("sqlite3", "file::memory:")
 	if err != nil {
 		t.Error(err)
 	}
 
-	tbl, err := sqlite.NewSimpleTable[K](db, name, newModel)
-	require.NoError(t, err)
+	tbl, err := NewSimpleTable[K, R](db, name)
+	testutil.NoError(t, err)
 	return tbl
 }
 
@@ -60,80 +60,83 @@ func newStringItem() *StringItem {
 }
 
 func TestIntTable(t *testing.T) {
-	tbl := createTable[int64](t, "tbl"+types.RandomID().Pretty(), func() *IntItem { return new(IntItem) })
+	t.Log("TestIntTable")
+	tbl := createTable[int64, *IntItem](t, "tbl"+types.RandomID().Pretty())
 	var items []*IntItem
 	item := newIntItem()
 	items = append(items, item)
 	err := tbl.Insert(item)
-	require.NoError(t, err)
+	testutil.NoError(t, err)
 	v, err := tbl.Get(item.ID)
-	require.NoError(t, err)
-	require.Equal(t, item, v)
+	testutil.NoError(t, err)
+	testutil.Equal(t, item, v)
 
 	item = newIntItem()
 	item.ID = items[0].ID + 1
 	err = tbl.Insert(item)
-	require.NoError(t, err)
+	testutil.NoError(t, err)
 	items = append(items, item)
 
 	l, err := tbl.ListAll()
-	require.NoError(t, err)
-	require.NotEmpty(t, l)
-	require.Equal(t, items, l)
+	testutil.NoError(t, err)
+	testutil.True(t, len(l) != 0)
+	testutil.Equal(t, items, l)
 
 	l, err = tbl.ListGreaterThan(item.ID, 10)
-	require.NoError(t, err)
-	require.Empty(t, l)
+	testutil.NoError(t, err)
+	testutil.True(t, len(l) == 0)
 
 	l, err = tbl.ListLessThan(item.ID+1, 10)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(l))
+	testutil.NoError(t, err)
+	testutil.Equal(t, 2, len(l))
 	//t.Log(l[0].ID, l[1].ID)
-	require.True(t, l[0].ID < l[1].ID)
+	testutil.True(t, l[0].ID < l[1].ID)
 
 	err = tbl.Delete(item.ID)
-	require.NoError(t, err)
+	testutil.NoError(t, err)
 
 	v, err = tbl.Get(item.ID)
-	require.NotEmpty(t, err)
-	require.Equal(t, true, errors.Is(err, sql.ErrNoRows))
+	testutil.Error(t, err)
+	testutil.Equal(t, true, errors.Is(err, sql.ErrNoRows))
 }
 
 func TestStringTable(t *testing.T) {
-	tbl := createTable[string](t, "tbl"+types.RandomID().Pretty(), func() *StringItem { return new(StringItem) })
+	t.Log("TestStringTable")
+
+	tbl := createTable[string, *StringItem](t, "tbl"+types.RandomID().Pretty())
 	var items []*StringItem
 	item := newStringItem()
 	items = append(items, item)
 	err := tbl.Insert(item)
-	require.NoError(t, err)
+	testutil.NoError(t, err)
 	v, err := tbl.Get(item.ID)
-	require.NoError(t, err)
-	require.Equal(t, item, v)
+	testutil.NoError(t, err)
+	testutil.Equal(t, item, v)
 
 	item = newStringItem()
 	err = tbl.Insert(item)
-	require.NoError(t, err)
+	testutil.NoError(t, err)
 	items = append(items, item)
 
 	l, err := tbl.ListAll()
-	require.NoError(t, err)
-	require.NotEmpty(t, l)
-	require.Equal(t, items, l)
+	testutil.NoError(t, err)
+	testutil.True(t, len(l) != 0)
+	testutil.Equal(t, items, l)
 
 	l, err = tbl.ListGreaterThan("a", 10)
-	require.NoError(t, err)
-	require.Empty(t, l)
+	testutil.NoError(t, err)
+	testutil.True(t, len(l) == 0)
 
 	l, err = tbl.ListLessThan("Z", 10)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(l))
+	testutil.NoError(t, err)
+	testutil.Equal(t, 2, len(l))
 	//t.Log(l[0].ID, l[1].ID)
-	require.True(t, l[0].ID < l[1].ID)
+	testutil.True(t, l[0].ID < l[1].ID)
 
 	err = tbl.Delete(item.ID)
-	require.NoError(t, err)
+	testutil.NoError(t, err)
 
 	v, err = tbl.Get(item.ID)
-	require.NotEmpty(t, err)
-	require.Equal(t, true, errors.Is(err, sql.ErrNoRows))
+	testutil.Error(t, err)
+	testutil.Equal(t, true, errors.Is(err, sql.ErrNoRows))
 }

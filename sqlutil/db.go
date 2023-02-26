@@ -1,4 +1,4 @@
-package sqlx
+package sqlutil
 
 import (
 	"database/sql"
@@ -6,7 +6,7 @@ import (
 	"reflect"
 )
 
-var _tableNamingType = reflect.TypeOf((*tableNaming)(nil)).Elem()
+var _tableNamerType = reflect.TypeOf((*tableNamer)(nil)).Elem()
 
 type DB struct {
 	db         *sql.DB

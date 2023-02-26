@@ -1,26 +1,24 @@
-package sqlx
+package sqlutil
 
 import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"reflect"
 	"strings"
 
-	"code.olapie.com/log"
-	"code.olapie.com/sugar/naming"
-	"code.olapie.com/sugar/rtx"
-	"code.olapie.com/sugar/sqlx"
-	"github.com/jinzhu/inflection"
+	"go.olapie.com/conv"
+	"go.olapie.com/dbx/internal/rt"
 )
 
-type tableNaming interface {
+type tableNamer interface {
 	TableName() string
 }
 
 func getTableName(record any) string {
-	if n, ok := record.(tableNaming); ok {
+	if n, ok := record.(tableNamer); ok {
 		return n.TableName()
 	}
 
@@ -49,18 +47,18 @@ func getTableNameByType(typ reflect.Type) string {
 		panic("not struct: " + typ.String())
 	}
 
-	if typ.Implements(_tableNamingType) {
-		return reflect.Zero(typ).Interface().(tableNaming).TableName()
+	if typ.Implements(_tableNamerType) {
+		return reflect.Zero(typ).Interface().(tableNamer).TableName()
 	}
 
-	if reflect.PtrTo(typ).Implements(_tableNamingType) {
+	if reflect.PtrTo(typ).Implements(_tableNamerType) {
 		// Pointer receiver may be dereferenced during TableName method call
 		// New its elem value in order to make pointer non-nil
-		return reflect.New(typ).Interface().(tableNaming).TableName()
-		//return reflect.Zero(reflect.PtrTo(typ)).Interface().(tableNaming).TableName()
+		return reflect.New(typ).Interface().(tableNamer).TableName()
+		//return reflect.Zero(reflect.PtrTo(typ)).Interface().(tableNamer).TableName()
 	}
 
-	return inflection.Plural(naming.ToSnake(typ.Name()))
+	return conv.Plural(conv.ToSnake(typ.Name()))
 }
 
 type Table struct {
@@ -72,17 +70,17 @@ type Table struct {
 func (t *Table) Insert(record any) error {
 	query, values, err := t.prepareInsertQuery(record)
 	if err != nil {
-		log.G().Error("cannot prepareInsertQuery", log.Error(err))
+		log.Println(err)
 		return err
 	}
 
 	if Debug {
-		log.G().Debug("insert record", log.String("query", query), log.Any("args", toReadableArgs(values)))
+		log.Println(query, toReadableArgs(values))
 	}
 
 	result, err := t.exe.Exec(query, values...)
 	if err != nil {
-		log.G().Error("cannot execute", log.Error(err))
+		log.Println(err)
 		return err
 	}
 	v := getStructValue(record)
@@ -90,7 +88,7 @@ func (t *Table) Insert(record any) error {
 	if len(info.aiName) > 0 && v.FieldByIndex(info.nameToIndex[info.aiName]).Int() == 0 {
 		id, err := result.LastInsertId()
 		if err != nil {
-			log.G().Error("cannot getLastInsertId", log.Error(err))
+			log.Println(err)
 			return err
 		}
 		v.FieldByIndex(info.nameToIndex[info.aiName]).SetInt(id)
@@ -174,7 +172,7 @@ func (t *Table) Update(record any) error {
 
 	query := buf.String()
 	if Debug {
-		log.G().Debug("update record", log.String("query", query), log.Any("args", toReadableArgs(args)))
+		log.Println(query, toReadableArgs(args))
 	}
 	_, err := t.exe.Exec(query, args...)
 	return err
@@ -194,7 +192,7 @@ func (t *Table) Save(record any) error {
 func (t *Table) mysqlSave(record any) error {
 	query, values, err := t.prepareInsertQuery(record)
 	if err != nil {
-		log.Error(err)
+		log.Println(err)
 		return err
 	}
 
@@ -224,14 +222,14 @@ func (t *Table) mysqlSave(record any) error {
 	query = buf.String()
 
 	if Debug {
-		log.G().Debug("exec", log.String("query", query), log.Any("args", toReadableArgs(values)))
+		log.Println(query, toReadableArgs(values))
 	}
 
 	result, err := t.exe.Exec(query, values...)
 	if len(info.aiName) > 0 && v.FieldByIndex(info.nameToIndex[info.aiName]).Int() == 0 {
 		id, err := result.LastInsertId()
 		if err != nil {
-			log.Error(err)
+			log.Println(err)
 			return err
 		}
 		v.FieldByIndex(info.nameToIndex[info.aiName]).SetInt(id)
@@ -242,7 +240,7 @@ func (t *Table) mysqlSave(record any) error {
 func (t *Table) sqliteSave(record any) error {
 	query, values, err := t.prepareInsertQuery(record)
 	if err != nil {
-		log.Error(err)
+		log.Println(err)
 		return err
 	}
 
@@ -251,14 +249,14 @@ func (t *Table) sqliteSave(record any) error {
 	info := getColumnInfo(v.Type())
 
 	if Debug {
-		log.G().Debug("exec", log.String("query", query), log.Any("args", toReadableArgs(values)))
+		log.Println(query, toReadableArgs(values))
 	}
 
 	result, err := t.exe.Exec(query, values...)
 	if len(info.aiName) > 0 && v.FieldByIndex(info.nameToIndex[info.aiName]).Int() == 0 {
 		id, err := result.LastInsertId()
 		if err != nil {
-			log.Error(err)
+			log.Println(err)
 			return err
 		}
 		v.FieldByIndex(info.nameToIndex[info.aiName]).SetInt(id)
@@ -306,12 +304,12 @@ func (t *Table) Select(records any, where string, args ...any) error {
 	query := buf.String()
 
 	if Debug {
-		log.G().Debug("exec", log.String("query", query), log.Any("args", toReadableArgs(args)))
+		log.Println(query, toReadableArgs(args))
 	}
 
 	rows, err := t.exe.Query(query, args...)
 	if err != nil {
-		log.Error(err)
+		log.Println(err)
 		return err
 	}
 	defer rows.Close()
@@ -322,7 +320,7 @@ func (t *Table) Select(records any, where string, args ...any) error {
 	sliceValue := v.Elem()
 	fields := make([]any, len(fi.indexes))
 	for rows.Next() {
-		ptrToElem := rtx.DeepNew(elemType)
+		ptrToElem := rt.DeepNew(elemType)
 		elem := ptrToElem.Elem()
 		for i, idx := range fi.indexes {
 			if IndexOfString(fi.jsonNames, fi.names[i]) >= 0 {
@@ -353,7 +351,7 @@ func (t *Table) Select(records any, where string, args ...any) error {
 
 		err = rows.Scan(fields...)
 		if err != nil {
-			log.Error(err)
+			log.Println(err)
 			return err
 		}
 
@@ -364,7 +362,7 @@ func (t *Table) Select(records any, where string, args ...any) error {
 			data := reflect.ValueOf(addr).Elem().Interface()
 			err = json.Unmarshal(data.([]byte), elem.FieldByIndex(idx).Addr().Interface())
 			if err != nil {
-				log.Error(err)
+				log.Println(err)
 				return err
 			}
 		}
@@ -412,7 +410,7 @@ func (t *Table) SelectOne(record any, where string, args ...any) error {
 	}
 
 	//Store result in ev. If failed, don't change record's value
-	ev := rtx.DeepNew(rv.Elem().Type()).Elem()
+	ev := rt.DeepNew(rv.Elem().Type()).Elem()
 	elem := ev
 	if elem.Kind() == reflect.Ptr {
 		elem = elem.Elem()
@@ -436,7 +434,7 @@ func (t *Table) SelectOne(record any, where string, args ...any) error {
 	query := buf.String()
 
 	if Debug {
-		log.G().Debug("exec", log.String("query", query), log.Any("args", toReadableArgs(args)))
+		log.Println(query, toReadableArgs(args))
 	}
 
 	fieldAddrs := make([]any, len(info.indexes))
@@ -447,13 +445,13 @@ func (t *Table) SelectOne(record any, where string, args ...any) error {
 		} else if IndexOfString(info.nullableNames, info.names[i]) >= 0 {
 			field := elem.FieldByIndex(idx)
 			switch {
-			case rtx.IsInt(field), rtx.IsUint(field):
+			case rt.IsInt(field), rt.IsUint(field):
 				var v sql.NullInt64
 				fieldAddrs[i] = &v
 			case field.Kind() == reflect.Bool:
 				var b sql.NullBool
 				fieldAddrs[i] = &b
-			case rtx.IsFloat(field):
+			case rt.IsFloat(field):
 				var v sql.NullFloat64
 				fieldAddrs[i] = &v
 			case field.Kind() == reflect.String:
@@ -469,7 +467,7 @@ func (t *Table) SelectOne(record any, where string, args ...any) error {
 	err := t.exe.QueryRow(query, args...).Scan(fieldAddrs...)
 	if err != nil {
 		if err != sql.ErrNoRows {
-			log.Error(err)
+			log.Println(err)
 		}
 		return err
 	}
@@ -481,7 +479,7 @@ func (t *Table) SelectOne(record any, where string, args ...any) error {
 		data := reflect.ValueOf(addr).Elem().Interface()
 		err = json.Unmarshal(data.([]byte), elem.FieldByIndex(idx).Addr().Interface())
 		if err != nil {
-			log.Error(err)
+			log.Println(err)
 			return err
 		}
 	}
@@ -542,12 +540,12 @@ func (t *Table) Delete(where string, args ...any) error {
 	query := buf.String()
 
 	if Debug {
-		log.G().Debug("exec", log.String("query", query), log.Any("args", toReadableArgs(args)))
+		log.Println(query, toReadableArgs(args))
 	}
 
 	_, err := t.exe.Exec(query, args...)
 	if err != nil {
-		log.Error(err)
+		log.Println(err)
 	}
 	return err
 }
@@ -563,13 +561,13 @@ func (t *Table) Count(where string, args ...any) (int, error) {
 	query := buf.String()
 
 	if Debug {
-		log.G().Debug("exec", log.String("query", query), log.Any("args", toReadableArgs(args)))
+		log.Println(query, toReadableArgs(args))
 	}
 
 	var count int
 	err := t.exe.QueryRow(query, args...).Scan(&count)
 	if err != nil {
-		log.Error(err)
+		log.Println(err)
 		return 0, err
 	}
 
@@ -584,7 +582,7 @@ func (t *Table) getFieldValueByName(item reflect.Value, info *columnInfo, name s
 			return nil, err
 		}
 
-		if IndexOfString(info.nullableNames, name) >= 0 && sqlx.IsSQLNullValue(string(data)) {
+		if IndexOfString(info.nullableNames, name) >= 0 && IsNil(string(data)) {
 			return nil, nil
 		} else {
 			return data, nil

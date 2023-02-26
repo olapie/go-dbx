@@ -1,4 +1,4 @@
-package sqlx
+package sqlutil
 
 import (
 	"database/sql"
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"code.olapie.com/sugar/conv"
+	"go.olapie.com/conv"
 )
 
 func JSON(v any) any {

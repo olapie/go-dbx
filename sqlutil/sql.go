@@ -1,4 +1,4 @@
-package sqlx
+package sqlutil
 
 import (
 	"bytes"
@@ -7,8 +7,6 @@ import (
 	"io/fs"
 	"path/filepath"
 	"text/template"
-
-	"code.olapie.com/log"
 )
 
 var Debug = false
@@ -33,7 +31,7 @@ func MustPrepare(db *sql.DB, format string, args ...any) *sql.Stmt {
 	query := fmt.Sprintf(format, args...)
 	stmt, err := db.Prepare(query)
 	if err != nil {
-		log.G().Panic("cannot prepare statement", log.String("query", query), log.Error(err))
+		panic(err)
 	}
 	return stmt
 }
@@ -82,4 +80,13 @@ func ExecSQLDir(db *sql.DB, target fs.FS, params map[string]any) error {
 		}
 		return nil
 	})
+}
+
+func IsNil(s string) bool {
+	switch s {
+	case "{}", "[]", "null", "NULL":
+		return true
+	default:
+		return false
+	}
 }

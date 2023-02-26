@@ -2,27 +2,44 @@ package sqlite
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 )
 
-func Open(fileName string) *sql.DB {
-	err := os.MkdirAll(filepath.Dir(fileName), 0755)
-	if err != nil {
-		log.Panicf("Mkdir: %v", err)
+func Open(fileName string) (*sql.DB, error) {
+	dirname := filepath.Dir(fileName)
+	if fi, err := os.Stat(dirname); err != nil {
+		if err == os.ErrNotExist {
+			err := os.MkdirAll(dirname, 0755)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	} else if !fi.IsDir() {
+		return nil, errors.New(dirname + " is not a directory")
 	}
 
-	_, err = os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0644)
+	_, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		log.Panicf("Open file: %v", err)
+		return nil, err
 	}
 
 	dataSource := fmt.Sprintf("file:%s?cache=shared", fileName)
-	db, err := sql.Open("sqlite3", dataSource)
+	return sql.Open("sqlite3", dataSource)
+}
+
+func MustOpen(filename string) *sql.DB {
+	return MustGet(Open(filename))
+}
+
+// MustGet eliminates nil err and panics if err isn't nil
+func MustGet[T any](v T, err error) T {
 	if err != nil {
-		log.Panicf("Open db: %v", err)
+		panic(err)
 	}
-	return db
+	return v
 }
