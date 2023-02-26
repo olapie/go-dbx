@@ -3,11 +3,12 @@ package sqlite
 import (
 	"database/sql"
 	"errors"
+	"math/rand"
 	"testing"
 
-	"code.olapie.com/sugar/v2/testutil"
-	"code.olapie.com/sugar/v2/types"
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"go.olapie.com/dbx/internal/testutil"
 )
 
 func createTable[K SimpleKey, R SimpleTableRecord[K]](t *testing.T, name string) *SimpleTable[K, R] {
@@ -35,9 +36,9 @@ func (i *IntItem) PrimaryKey() int64 {
 
 func newIntItem() *IntItem {
 	return &IntItem{
-		ID:    types.RandomID().Int(),
-		Name:  types.RandomID().Pretty(),
-		Score: float64(types.RandomID()) / float64(3),
+		ID:    rand.Int63(),
+		Name:  uuid.NewString(),
+		Score: float64(rand.Int63()) / float64(3),
 	}
 }
 
@@ -53,15 +54,15 @@ func (i *StringItem) PrimaryKey() string {
 
 func newStringItem() *StringItem {
 	return &StringItem{
-		ID:    types.RandomID().Pretty(),
-		Name:  types.RandomID().Pretty(),
-		Score: float64(types.RandomID()) / float64(3),
+		ID:    uuid.NewString(),
+		Name:  uuid.NewString(),
+		Score: float64(rand.Int63()) / float64(3),
 	}
 }
 
 func TestIntTable(t *testing.T) {
 	t.Log("TestIntTable")
-	tbl := createTable[int64, *IntItem](t, "tbl"+types.RandomID().Pretty())
+	tbl := createTable[int64, *IntItem](t, "tbl"+uuid.NewString())
 	var items []*IntItem
 	item := newIntItem()
 	items = append(items, item)
@@ -103,7 +104,7 @@ func TestIntTable(t *testing.T) {
 func TestStringTable(t *testing.T) {
 	t.Log("TestStringTable")
 
-	tbl := createTable[string, *StringItem](t, "tbl"+types.RandomID().Pretty())
+	tbl := createTable[string, *StringItem](t, "tbl"+uuid.NewString())
 	var items []*StringItem
 	item := newStringItem()
 	items = append(items, item)

@@ -4,12 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"sync"
+
 	"go.olapie.com/conv"
 	"go.olapie.com/dbx/sqlutil"
 	"go.olapie.com/security"
 	"go.olapie.com/times"
-	"reflect"
-	"sync"
 )
 
 type SimpleTableRecord[T SimpleKey] interface {

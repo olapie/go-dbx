@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+
 	"go.olapie.com/dbx/psql/internal/composite"
 )
 

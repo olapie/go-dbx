@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"os/user"
 	"sync"
-
-	"code.olapie.com/sugar/v2"
 )
 
 type OpenOptions struct {
@@ -97,7 +95,7 @@ func Open(options *OpenOptions) (*sql.DB, error) {
 }
 
 func MustOpen(options *OpenOptions) *sql.DB {
-	return sugar.MustGet(Open(options))
+	return MustGet(Open(options))
 }
 
 func OpenLocal() (*sql.DB, error) {
@@ -113,7 +111,7 @@ func OpenLocal() (*sql.DB, error) {
 }
 
 func MustOpenLocal() *sql.DB {
-	return sugar.MustGet(OpenLocal())
+	return MustGet(OpenLocal())
 }
 
 type Factory[T any] interface {
@@ -157,4 +155,12 @@ func (f *factoryImpl[T]) Get(ctx context.Context, repoID string) T {
 	}
 	f.mu.Unlock()
 	return r
+}
+
+// MustGet eliminates nil err and panics if err isn't nil
+func MustGet[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
 }
