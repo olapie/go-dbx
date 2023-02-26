@@ -7,10 +7,10 @@ import (
 	"reflect"
 	"sync"
 
-	"go.olapie.com/conv"
 	"go.olapie.com/dbx/sqlutil"
 	"go.olapie.com/security"
 	"go.olapie.com/times"
+	"go.olapie.com/utils"
 )
 
 type SimpleTableRecord[T SimpleKey] interface {
@@ -209,7 +209,7 @@ func (t *SimpleTable[K, R]) encode(key K, r R) (data []byte, err error) {
 	if t.options.MarshalFunc != nil {
 		data, err = t.options.MarshalFunc(r)
 	} else {
-		data, err = conv.Marshal(r)
+		data, err = utils.Marshal(r)
 		if err != nil {
 			data, err = json.Marshal(r)
 		}
@@ -239,7 +239,7 @@ func (t *SimpleTable[K, R]) decode(key K, data []byte) (record R, err error) {
 		return record, err
 	}
 
-	err = conv.Unmarshal(data, &record)
+	err = utils.Unmarshal(data, &record)
 	if err != nil {
 		err = json.Unmarshal(data, &record)
 	}

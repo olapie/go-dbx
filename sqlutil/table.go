@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"strings"
 
-	"go.olapie.com/conv"
 	"go.olapie.com/dbx/internal/rt"
+	"go.olapie.com/utils"
 )
 
 type tableNamer interface {
@@ -58,7 +58,7 @@ func getTableNameByType(typ reflect.Type) string {
 		//return reflect.Zero(reflect.PtrTo(typ)).Interface().(tableNamer).TableName()
 	}
 
-	return conv.Plural(conv.ToSnake(typ.Name()))
+	return utils.Plural(utils.ToSnake(typ.Name()))
 }
 
 type Table struct {

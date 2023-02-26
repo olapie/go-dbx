@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"go.olapie.com/conv"
+	"go.olapie.com/utils"
 )
 
 type BigInt big.Int
@@ -21,7 +21,7 @@ func (i *BigInt) Scan(src any) error {
 		return nil
 	}
 
-	s, err := conv.ToString(src)
+	s, err := utils.ToString(src)
 	if err != nil {
 		return fmt.Errorf("cannot parse %v into big.Int", src)
 	}

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync"
 
-	"go.olapie.com/conv"
 	"go.olapie.com/times"
+	"go.olapie.com/utils"
 )
 
 type KVTableOptions struct {
@@ -63,7 +63,7 @@ func (t *KVTable) Int64(key string) (int64, error) {
 		return 0, err
 	}
 
-	n, err := conv.ToInt64(v)
+	n, err := utils.ToInt64(v)
 	if err != nil {
 		return 0, err
 	}
@@ -185,7 +185,7 @@ func (t *KVTable) Close() error {
 }
 
 func (t *KVTable) encode(obj any) ([]byte, error) {
-	data, err := conv.Marshal(obj)
+	data, err := utils.Marshal(obj)
 	if err != nil {
 		return json.Marshal(obj)
 	}
@@ -193,7 +193,7 @@ func (t *KVTable) encode(obj any) ([]byte, error) {
 }
 
 func (t *KVTable) decode(data []byte, ptrToObj any) error {
-	err := conv.Unmarshal(data, ptrToObj)
+	err := utils.Unmarshal(data, ptrToObj)
 	if err != nil {
 		err = json.Unmarshal(data, ptrToObj)
 	}

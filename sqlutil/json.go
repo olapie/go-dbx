@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"go.olapie.com/conv"
+	"go.olapie.com/utils"
 )
 
 func JSON(v any) any {
@@ -35,7 +35,7 @@ func (j *jsonHolder) Scan(src any) error {
 		return nil
 	}
 
-	b, err := conv.ToBytes(src)
+	b, err := utils.ToBytes(src)
 	if err != nil {
 		return fmt.Errorf("parse bytes: %w", err)
 	}

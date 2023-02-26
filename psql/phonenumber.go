@@ -5,8 +5,8 @@ import (
 	"database/sql/driver"
 	"fmt"
 
-	"go.olapie.com/conv"
 	"go.olapie.com/dbx/psql/internal/composite"
+	"go.olapie.com/utils"
 )
 
 var (
@@ -28,7 +28,7 @@ func (ps *phoneNumberScanner) Scan(src any) error {
 		return nil
 	}
 
-	s, err := conv.ToString(src)
+	s, err := utils.ToString(src)
 	if err != nil {
 		return fmt.Errorf("parse string: %w", err)
 	}
@@ -46,11 +46,11 @@ func (ps *phoneNumberScanner) Scan(src any) error {
 	}
 
 	n := new(PhoneNumber)
-	n.Code, err = conv.ToInt32(fields[0])
+	n.Code, err = utils.ToInt32(fields[0])
 	if err != nil {
 		return fmt.Errorf("parse code %s: %w", fields[0], err)
 	}
-	n.Number, err = conv.ToInt64(fields[1])
+	n.Number, err = utils.ToInt64(fields[1])
 	if err != nil {
 		return fmt.Errorf("parse code %s: %w", fields[1], err)
 	}
