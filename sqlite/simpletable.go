@@ -56,12 +56,14 @@ func NewSimpleTable[K SimpleKey, R SimpleTableRecord[K]](db *sql.DB, name string
 		typ = "BIGINT"
 	}
 
-	_, err := db.Exec(fmt.Sprintf(`
+	query := fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS %s(
 id %s PRIMARY KEY,
 data BLOB,
 updated_at BIGINT
-)`, name, typ))
+)`, name, typ)
+	fmt.Println(query)
+	_, err := db.Exec(query)
 	if err != nil {
 		return nil, err
 	}

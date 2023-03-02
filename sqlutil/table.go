@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"strings"
 
-	"go.olapie.com/dbx/internal/rt"
 	"go.olapie.com/utils"
 )
 
@@ -320,7 +319,7 @@ func (t *Table) Select(records any, where string, args ...any) error {
 	sliceValue := v.Elem()
 	fields := make([]any, len(fi.indexes))
 	for rows.Next() {
-		ptrToElem := rt.DeepNew(elemType)
+		ptrToElem := utils.DeepNew(elemType)
 		elem := ptrToElem.Elem()
 		for i, idx := range fi.indexes {
 			if IndexOfString(fi.jsonNames, fi.names[i]) >= 0 {
@@ -410,7 +409,7 @@ func (t *Table) SelectOne(record any, where string, args ...any) error {
 	}
 
 	//Store result in ev. If failed, don't change record's value
-	ev := rt.DeepNew(rv.Elem().Type()).Elem()
+	ev := utils.DeepNew(rv.Elem().Type()).Elem()
 	elem := ev
 	if elem.Kind() == reflect.Ptr {
 		elem = elem.Elem()
@@ -445,13 +444,13 @@ func (t *Table) SelectOne(record any, where string, args ...any) error {
 		} else if IndexOfString(info.nullableNames, info.names[i]) >= 0 {
 			field := elem.FieldByIndex(idx)
 			switch {
-			case rt.IsInt(field), rt.IsUint(field):
+			case utils.IsInt(field), utils.IsUint(field):
 				var v sql.NullInt64
 				fieldAddrs[i] = &v
 			case field.Kind() == reflect.Bool:
 				var b sql.NullBool
 				fieldAddrs[i] = &b
-			case rt.IsFloat(field):
+			case utils.IsFloat(field):
 				var v sql.NullFloat64
 				fieldAddrs[i] = &v
 			case field.Kind() == reflect.String:

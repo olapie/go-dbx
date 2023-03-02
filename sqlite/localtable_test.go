@@ -3,13 +3,13 @@ package sqlite
 import (
 	"context"
 	"fmt"
+	"go.olapie.com/utils"
 	"math/rand"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"go.olapie.com/dbx/internal/testutil"
 )
 
 type localTableItem struct {
@@ -56,44 +56,44 @@ func TestLocalTable_SaveRemote(t *testing.T) {
 	item := newLocalTableItem()
 	localID := uuid.NewString()
 	err := table.SaveRemote(ctx, localID, 0, item, time.Now().Unix())
-	testutil.NoError(t, err)
+	utils.MustNotErrorT(t, err)
 	record, err := table.Get(ctx, localID)
-	testutil.NoError(t, err)
-	testutil.Equal(t, item, record)
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, item, record)
 
 	item.Text = time.Now().String() + "new"
 	err = table.SaveRemote(ctx, localID, 0, item, time.Now().Unix())
-	testutil.NoError(t, err)
+	utils.MustNotErrorT(t, err)
 	record, err = table.Get(ctx, localID)
-	testutil.NoError(t, err)
-	testutil.Equal(t, item, record)
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, item, record)
 
 	records, err := table.ListLocals(ctx)
-	testutil.NoError(t, err)
-	testutil.Equal(t, 0, len(records))
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, 0, len(records))
 
 	records, err = table.ListDeletions(ctx)
-	testutil.NoError(t, err)
-	testutil.Equal(t, 0, len(records))
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, 0, len(records))
 
 	records, err = table.ListUpdates(ctx)
-	testutil.NoError(t, err)
-	testutil.Equal(t, 0, len(records))
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, 0, len(records))
 
 	records, err = table.ListRemotes(ctx)
-	testutil.NoError(t, err)
-	testutil.Equal(t, 1, len(records))
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, 1, len(records))
 
 	err = table.Delete(ctx, localID)
-	testutil.NoError(t, err)
+	utils.MustNotErrorT(t, err)
 	records, err = table.ListRemotes(ctx)
-	testutil.NoError(t, err)
-	testutil.Equal(t, 0, len(records))
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, 0, len(records))
 
 	records, err = table.ListDeletions(ctx)
-	testutil.NoError(t, err)
-	testutil.Equal(t, 1, len(records))
-	testutil.Equal(t, item, records[0])
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, 1, len(records))
+	utils.MustEqualT(t, item, records[0])
 
 }
 
@@ -104,61 +104,61 @@ func TestLocalTable_SaveLocal(t *testing.T) {
 		item := newLocalTableItem()
 		localID := uuid.NewString()
 		err := table.SaveLocal(ctx, localID, 0, item)
-		testutil.NoError(t, err)
+		utils.MustNotErrorT(t, err)
 		record, err := table.Get(ctx, localID)
-		testutil.NoError(t, err)
-		testutil.Equal(t, item, record)
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, item, record)
 
 		item.Text = time.Now().String() + "new"
 		err = table.SaveLocal(ctx, localID, 0, item)
-		testutil.NoError(t, err)
+		utils.MustNotErrorT(t, err)
 		record, err = table.Get(ctx, localID)
-		testutil.NoError(t, err)
-		testutil.Equal(t, item, record)
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, item, record)
 
 		locals, err := table.ListLocals(ctx)
-		testutil.NoError(t, err)
-		testutil.Equal(t, 1, len(locals))
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, 1, len(locals))
 
 		remoteItem := newLocalTableItem()
 		err = table.SaveRemote(ctx, localID, 0, remoteItem, time.Now().Unix())
-		testutil.NoError(t, err)
+		utils.MustNotErrorT(t, err)
 
 		locals, err = table.ListLocals(ctx)
-		testutil.NoError(t, err)
-		testutil.Equal(t, 0, len(locals))
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, 0, len(locals))
 	})
 
 	t.Run("DeleteLocal", func(t *testing.T) {
 		item := newLocalTableItem()
 		localID := uuid.NewString()
 		err := table.SaveLocal(ctx, localID, 0, item)
-		testutil.NoError(t, err)
+		utils.MustNotErrorT(t, err)
 		record, err := table.Get(ctx, localID)
-		testutil.NoError(t, err)
-		testutil.Equal(t, item, record)
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, item, record)
 
 		item.Text = time.Now().String() + "new"
 		err = table.SaveLocal(ctx, localID, 0, item)
-		testutil.NoError(t, err)
+		utils.MustNotErrorT(t, err)
 		record, err = table.Get(ctx, localID)
-		testutil.NoError(t, err)
-		testutil.Equal(t, item, record)
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, item, record)
 
 		locals, err := table.ListLocals(ctx)
-		testutil.NoError(t, err)
-		testutil.Equal(t, 1, len(locals))
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, 1, len(locals))
 
 		err = table.Delete(ctx, localID)
-		testutil.NoError(t, err)
+		utils.MustNotErrorT(t, err)
 
 		locals, err = table.ListLocals(ctx)
-		testutil.NoError(t, err)
-		testutil.Equal(t, 0, len(locals))
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, 0, len(locals))
 
 		deletes, err := table.ListDeletions(ctx)
-		testutil.NoError(t, err)
-		testutil.Equal(t, 0, len(deletes))
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, 0, len(deletes))
 	})
 }
 
@@ -169,17 +169,17 @@ func TestLocalTable_Update(t *testing.T) {
 		item := newLocalTableItem()
 		id := uuid.NewString()
 		err := table.SaveRemote(ctx, id, 0, item, time.Now().Unix())
-		testutil.NoError(t, err)
+		utils.MustNotErrorT(t, err)
 		got, err := table.Get(ctx, id)
-		testutil.NoError(t, err)
-		testutil.Equal(t, item, got)
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, item, got)
 
-		item.Text = testutil.RandomString(20)
+		item.Text = utils.RandomString(20)
 		err = table.UpdateRemote(ctx, id, item)
-		testutil.NoError(t, err)
+		utils.MustNotErrorT(t, err)
 		got, err = table.Get(ctx, id)
-		testutil.NoError(t, err)
-		testutil.Equal(t, item, got)
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, item, got)
 	})
 
 	t.Run("UpdateLocal", func(t *testing.T) {
@@ -187,17 +187,17 @@ func TestLocalTable_Update(t *testing.T) {
 		item := newLocalTableItem()
 		id := uuid.NewString()
 		err := table.SaveLocal(ctx, id, 0, item)
-		testutil.NoError(t, err)
+		utils.MustNotErrorT(t, err)
 		got, err := table.Get(ctx, id)
-		testutil.NoError(t, err)
-		testutil.Equal(t, item, got)
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, item, got)
 
-		item.Text = testutil.RandomString(20)
+		item.Text = utils.RandomString(20)
 		err = table.UpdateLocal(ctx, id, item)
-		testutil.NoError(t, err)
+		utils.MustNotErrorT(t, err)
 		got, err = table.Get(ctx, id)
-		testutil.NoError(t, err)
-		testutil.Equal(t, item, got)
+		utils.MustNotErrorT(t, err)
+		utils.MustEqualT(t, item, got)
 	})
 
 	t.Run("Update", func(t *testing.T) {
@@ -206,34 +206,34 @@ func TestLocalTable_Update(t *testing.T) {
 			item := newLocalTableItem()
 			id := uuid.NewString()
 			err := table.SaveRemote(ctx, id, 0, item, time.Now().Unix())
-			testutil.NoError(t, err)
+			utils.MustNotErrorT(t, err)
 			got, err := table.Get(ctx, id)
-			testutil.NoError(t, err)
-			testutil.Equal(t, item, got)
+			utils.MustNotErrorT(t, err)
+			utils.MustEqualT(t, item, got)
 
-			item.Text = testutil.RandomString(20)
+			item.Text = utils.RandomString(20)
 			err = table.Update(ctx, id, item)
-			testutil.NoError(t, err)
+			utils.MustNotErrorT(t, err)
 			got, err = table.Get(ctx, id)
-			testutil.NoError(t, err)
-			testutil.Equal(t, item, got)
+			utils.MustNotErrorT(t, err)
+			utils.MustEqualT(t, item, got)
 		})
 
 		t.Run("Local", func(t *testing.T) {
 			item := newLocalTableItem()
 			id := uuid.NewString()
 			err := table.SaveLocal(ctx, id, 0, item)
-			testutil.NoError(t, err)
+			utils.MustNotErrorT(t, err)
 			got, err := table.Get(ctx, id)
-			testutil.NoError(t, err)
-			testutil.Equal(t, item, got)
+			utils.MustNotErrorT(t, err)
+			utils.MustEqualT(t, item, got)
 
-			item.Text = testutil.RandomString(20)
+			item.Text = utils.RandomString(20)
 			err = table.UpdateLocal(ctx, id, item)
-			testutil.NoError(t, err)
+			utils.MustNotErrorT(t, err)
 			got, err = table.Get(ctx, id)
-			testutil.NoError(t, err)
-			testutil.Equal(t, item, got)
+			utils.MustNotErrorT(t, err)
+			utils.MustEqualT(t, item, got)
 		})
 	})
 }
@@ -245,7 +245,7 @@ func BenchmarkLocalTable_SaveLocal(b *testing.B) {
 		item := newLocalTableItem()
 		localID := uuid.NewString()
 		err := table.SaveLocal(ctx, localID, 0, item)
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 	}
 
 	var ids []string
@@ -253,12 +253,12 @@ func BenchmarkLocalTable_SaveLocal(b *testing.B) {
 		item := newLocalTableItem()
 		localID := uuid.NewString()
 		err := table.SaveRemote(ctx, localID, 0, item, time.Now().Unix())
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 		ids = append(ids, localID)
 	}
 	for i := 0; i < 30; i++ {
 		err := table.Delete(ctx, uuid.NewString())
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 	}
 
 	for i := 0; i < b.N; i++ {
@@ -279,7 +279,7 @@ func BenchmarkLocalTable_Get(b *testing.B) {
 		item := newLocalTableItem()
 		localID := uuid.NewString()
 		err := table.SaveLocal(ctx, localID, 0, item)
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 	}
 
 	var ids []string
@@ -287,12 +287,12 @@ func BenchmarkLocalTable_Get(b *testing.B) {
 		item := newLocalTableItem()
 		localID := uuid.NewString()
 		err := table.SaveRemote(ctx, localID, 0, item, time.Now().Unix())
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 		ids = append(ids, localID)
 	}
 	for i := 0; i < 30; i++ {
 		err := table.Delete(ctx, uuid.NewString())
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 	}
 
 	for i := 0; i < b.N; i++ {
@@ -307,7 +307,7 @@ func BenchmarkLocalTable_ListLocals(b *testing.B) {
 		item := newLocalTableItem()
 		localID := uuid.NewString()
 		err := table.SaveLocal(ctx, localID, 0, item)
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 	}
 
 	var ids []string
@@ -315,12 +315,12 @@ func BenchmarkLocalTable_ListLocals(b *testing.B) {
 		item := newLocalTableItem()
 		localID := uuid.NewString()
 		err := table.SaveRemote(ctx, localID, 0, item, time.Now().Unix())
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 		ids = append(ids, localID)
 	}
 	for i := 0; i < 30; i++ {
 		err := table.Delete(ctx, uuid.NewString())
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 	}
 
 	for i := 0; i < b.N; i++ {
@@ -335,7 +335,7 @@ func BenchmarkLocalTable_ListRemotes(b *testing.B) {
 		item := newLocalTableItem()
 		localID := uuid.NewString()
 		err := table.SaveLocal(ctx, localID, 0, item)
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 	}
 
 	var ids []string
@@ -343,12 +343,12 @@ func BenchmarkLocalTable_ListRemotes(b *testing.B) {
 		item := newLocalTableItem()
 		localID := uuid.NewString()
 		err := table.SaveRemote(ctx, localID, 0, item, time.Now().Unix())
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 		ids = append(ids, localID)
 	}
 	for i := 0; i < 30; i++ {
 		err := table.Delete(ctx, uuid.NewString())
-		testutil.NoError(b, err)
+		utils.MustNotErrorT(b, err)
 	}
 
 	for i := 0; i < b.N; i++ {

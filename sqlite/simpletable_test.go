@@ -3,24 +3,25 @@ package sqlite
 import (
 	"database/sql"
 	"errors"
-	"math/rand"
-	"testing"
-
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
-	"go.olapie.com/dbx/internal/testutil"
+	"go.olapie.com/utils"
+	"math/rand"
+	"strings"
+	"testing"
 )
 
-func createTable[K SimpleKey, R SimpleTableRecord[K]](t *testing.T, name string) *SimpleTable[K, R] {
+func createTable[K SimpleKey, R SimpleTableRecord[K]](t *testing.T) *SimpleTable[K, R] {
 	t.Log("createTable")
 
 	db, err := sql.Open("sqlite3", "file::memory:")
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
+	name := "test" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	tbl, err := NewSimpleTable[K, R](db, name)
-	testutil.NoError(t, err)
+	utils.MustNotErrorT(t, err)
 	return tbl
 }
 
@@ -62,82 +63,85 @@ func newStringItem() *StringItem {
 
 func TestIntTable(t *testing.T) {
 	t.Log("TestIntTable")
-	tbl := createTable[int64, *IntItem](t, "tbl"+uuid.NewString())
+	tbl := createTable[int64, *IntItem](t)
 	var items []*IntItem
 	item := newIntItem()
 	items = append(items, item)
 	err := tbl.Insert(item)
-	testutil.NoError(t, err)
+	utils.MustNotErrorT(t, err)
 	v, err := tbl.Get(item.ID)
-	testutil.NoError(t, err)
-	testutil.Equal(t, item, v)
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, item, v)
 
 	item = newIntItem()
 	item.ID = items[0].ID + 1
 	err = tbl.Insert(item)
-	testutil.NoError(t, err)
+	utils.MustNotErrorT(t, err)
 	items = append(items, item)
 
 	l, err := tbl.ListAll()
-	testutil.NoError(t, err)
-	testutil.True(t, len(l) != 0)
-	testutil.Equal(t, items, l)
+	utils.MustNotErrorT(t, err)
+	utils.MustTrueT(t, len(l) != 0)
+	utils.MustEqualT(t, items, l)
 
 	l, err = tbl.ListGreaterThan(item.ID, 10)
-	testutil.NoError(t, err)
-	testutil.True(t, len(l) == 0)
+	utils.MustNotErrorT(t, err)
+	utils.MustTrueT(t, len(l) == 0)
 
 	l, err = tbl.ListLessThan(item.ID+1, 10)
-	testutil.NoError(t, err)
-	testutil.Equal(t, 2, len(l))
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, 2, len(l))
 	//t.Log(l[0].ID, l[1].ID)
-	testutil.True(t, l[0].ID < l[1].ID)
+	utils.MustTrueT(t, l[0].ID < l[1].ID)
 
 	err = tbl.Delete(item.ID)
-	testutil.NoError(t, err)
+	utils.MustNotErrorT(t, err)
 
 	v, err = tbl.Get(item.ID)
-	testutil.Error(t, err)
-	testutil.Equal(t, true, errors.Is(err, sql.ErrNoRows))
+	utils.MustErrorT(t, err)
+	utils.MustEqualT(t, true, errors.Is(err, sql.ErrNoRows))
 }
 
 func TestStringTable(t *testing.T) {
 	t.Log("TestStringTable")
 
-	tbl := createTable[string, *StringItem](t, "tbl"+uuid.NewString())
+	tbl := createTable[string, *StringItem](t)
 	var items []*StringItem
 	item := newStringItem()
+	t.Log(item.PrimaryKey())
 	items = append(items, item)
 	err := tbl.Insert(item)
-	testutil.NoError(t, err)
+	utils.MustNotErrorT(t, err)
 	v, err := tbl.Get(item.ID)
-	testutil.NoError(t, err)
-	testutil.Equal(t, item, v)
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, item, v)
 
 	item = newStringItem()
+	t.Log(item.PrimaryKey())
 	err = tbl.Insert(item)
-	testutil.NoError(t, err)
+	utils.MustNotErrorT(t, err)
 	items = append(items, item)
 
 	l, err := tbl.ListAll()
-	testutil.NoError(t, err)
-	testutil.True(t, len(l) != 0)
-	testutil.Equal(t, items, l)
+	t.Log(len(l), err)
+	utils.MustNotErrorT(t, err, "ListAll")
+	utils.MustNotEmptyT(t, len(l), "ListAll")
+	utils.MustEqualT(t, items, l, "ListAll")
 
-	l, err = tbl.ListGreaterThan("a", 10)
-	testutil.NoError(t, err)
-	testutil.True(t, len(l) == 0)
+	l, err = tbl.ListGreaterThan("\x01", 10)
+	utils.MustNotErrorT(t, err, "ListGreaterThan")
+	utils.MustEqualT(t, len(l), 2, "ListGreaterThan")
 
-	l, err = tbl.ListLessThan("Z", 10)
-	testutil.NoError(t, err)
-	testutil.Equal(t, 2, len(l))
+	l, err = tbl.ListLessThan("\xFF", 10)
+	utils.MustNotErrorT(t, err)
+	utils.MustEqualT(t, 2, len(l), "ListLessThan")
 	//t.Log(l[0].ID, l[1].ID)
-	testutil.True(t, l[0].ID < l[1].ID)
+	utils.MustTrueT(t, l[0].ID < l[1].ID, "ListLessThan")
 
 	err = tbl.Delete(item.ID)
-	testutil.NoError(t, err)
+	utils.MustNotErrorT(t, err)
 
 	v, err = tbl.Get(item.ID)
-	testutil.Error(t, err)
-	testutil.Equal(t, true, errors.Is(err, sql.ErrNoRows))
+	utils.MustErrorT(t, err)
+	utils.MustEqualT(t, true, errors.Is(err, sql.ErrNoRows))
 }
