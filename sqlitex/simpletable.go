@@ -13,11 +13,7 @@ import (
 	"go.olapie.com/utils"
 )
 
-type SimpleTableRecord[T SimpleKey] interface {
-	PrimaryKey() T
-}
-
-type SimpleTableOptions[K SimpleKey, R SimpleTableRecord[K]] struct {
+type SimpleTableOptions[K SimpleKey, R any] struct {
 	Clock         times.Clock
 	MarshalFunc   func(r R) ([]byte, error)
 	UnmarshalFunc func(data []byte, r *R) error
@@ -28,7 +24,7 @@ type SimpleKey interface {
 	int | int32 | int64 | string
 }
 
-type SimpleTable[K SimpleKey, R SimpleTableRecord[K]] struct {
+type SimpleTable[K SimpleKey, R any] struct {
 	options SimpleTableOptions[K, R]
 	name    string
 	db      *sql.DB
@@ -45,9 +41,10 @@ type SimpleTable[K SimpleKey, R SimpleTableRecord[K]] struct {
 		deleteGreaterThan *sql.Stmt
 		deleteLessThan    *sql.Stmt
 	}
+	pkFn func(r R) K
 }
 
-func NewSimpleTable[K SimpleKey, R SimpleTableRecord[K]](db *sql.DB, name string, optFns ...func(options *SimpleTableOptions[K, R])) (*SimpleTable[K, R], error) {
+func NewSimpleTable[K SimpleKey, R any](db *sql.DB, name string, primaryKeyFunc func(r R) K, optFns ...func(options *SimpleTableOptions[K, R])) (*SimpleTable[K, R], error) {
 	var zero K
 	var typ string
 	if reflect.ValueOf(zero).Kind() == reflect.String {
@@ -71,6 +68,7 @@ updated_at BIGINT
 	t := &SimpleTable[K, R]{
 		name: name,
 		db:   db,
+		pkFn: primaryKeyFunc,
 	}
 
 	for _, fn := range optFns {
@@ -94,23 +92,38 @@ updated_at BIGINT
 	return t, nil
 }
 
-func (t *SimpleTable[K, R]) Insert(v SimpleTableRecord[K]) error {
+func (t *SimpleTable[K, R]) Insert(v R) error {
+	key := t.pkFn(v)
+	b, err := t.encode(key, v)
+	if err != nil {
+		return err
+	}
 	t.mu.Lock()
-	_, err := t.stmts.insert.Exec(v.PrimaryKey(), sqlutil.JSON(v), t.options.Clock.Now())
+	_, err = t.stmts.insert.Exec(key, b, t.options.Clock.Now())
 	t.mu.Unlock()
 	return err
 }
 
-func (t *SimpleTable[K, R]) Update(v SimpleTableRecord[K]) error {
+func (t *SimpleTable[K, R]) Update(v R) error {
+	key := t.pkFn(v)
+	b, err := t.encode(key, v)
+	if err != nil {
+		return err
+	}
 	t.mu.Lock()
-	_, err := t.stmts.update.Exec(v.PrimaryKey(), sqlutil.JSON(v), t.options.Clock.Now())
+	_, err = t.stmts.update.Exec(key, b, t.options.Clock.Now())
 	t.mu.Unlock()
 	return err
 }
 
-func (t *SimpleTable[K, R]) Save(v SimpleTableRecord[K]) error {
+func (t *SimpleTable[K, R]) Save(v R) error {
+	key := t.pkFn(v)
+	b, err := t.encode(key, v)
+	if err != nil {
+		return err
+	}
 	t.mu.Lock()
-	_, err := t.stmts.save.Exec(v.PrimaryKey(), sqlutil.JSON(v), t.options.Clock.Now())
+	_, err = t.stmts.save.Exec(key, b, t.options.Clock.Now())
 	t.mu.Unlock()
 	return err
 }

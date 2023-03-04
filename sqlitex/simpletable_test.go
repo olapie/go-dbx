@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func createTable[K SimpleKey, R SimpleTableRecord[K]](t *testing.T) *SimpleTable[K, R] {
+func createTable[K SimpleKey, R any](t *testing.T, pkFn func(R) K) *SimpleTable[K, R] {
 	t.Log("createTable")
 
 	db, err := sql.Open("sqlite3", "file::memory:")
@@ -20,7 +20,7 @@ func createTable[K SimpleKey, R SimpleTableRecord[K]](t *testing.T) *SimpleTable
 	}
 
 	name := "test" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	tbl, err := NewSimpleTable[K, R](db, name)
+	tbl, err := NewSimpleTable[K, R](db, name, pkFn)
 	utils.MustNotErrorT(t, err)
 	return tbl
 }
@@ -29,10 +29,6 @@ type IntItem struct {
 	ID    int64
 	Name  string
 	Score float64
-}
-
-func (i *IntItem) PrimaryKey() int64 {
-	return i.ID
 }
 
 func newIntItem() *IntItem {
@@ -63,7 +59,9 @@ func newStringItem() *StringItem {
 
 func TestIntTable(t *testing.T) {
 	t.Log("TestIntTable")
-	tbl := createTable[int64, *IntItem](t)
+	tbl := createTable[int64, *IntItem](t, func(item *IntItem) int64 {
+		return item.ID
+	})
 	var items []*IntItem
 	item := newIntItem()
 	items = append(items, item)
@@ -105,7 +103,9 @@ func TestIntTable(t *testing.T) {
 func TestStringTable(t *testing.T) {
 	t.Log("TestStringTable")
 
-	tbl := createTable[string, *StringItem](t)
+	tbl := createTable[string, *StringItem](t, func(item *StringItem) string {
+		return item.ID
+	})
 	var items []*StringItem
 	item := newStringItem()
 	t.Log(item.PrimaryKey())
