@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"go.olapie.com/times"
@@ -21,9 +22,14 @@ type KVTable struct {
 	name    string
 }
 
-func NewKVTable(db *sql.DB, optFns ...func(options *KVTableOptions)) *KVTable {
+func NewKVTable(db *sql.DB, name string, optFns ...func(options *KVTableOptions)) *KVTable {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "kv"
+	}
 	r := &KVTable{
-		db: db,
+		db:   db,
+		name: name,
 	}
 
 	for _, fn := range optFns {
@@ -34,12 +40,12 @@ func NewKVTable(db *sql.DB, optFns ...func(options *KVTableOptions)) *KVTable {
 		r.options.Clock = times.LocalClock{}
 	}
 
-	_, err := db.Exec(`
-CREATE TABLE IF NOT EXISTS kv(
+	_, err := db.Exec(fmt.Sprintf(`
+CREATE TABLE IF NOT EXISTS %s(
 k VARCHAR(255) PRIMARY KEY, 
 v BLOB NOT NULL,
 updated_at BIGINT NOT NULL
-)`)
+)`, name))
 	if err != nil {
 		panic(err)
 	}
@@ -48,7 +54,7 @@ updated_at BIGINT NOT NULL
 
 func (t *KVTable) SaveInt64(key string, val int64) error {
 	t.mu.Lock()
-	_, err := t.db.Exec("REPLACE INTO kv(k,v,updated_at) VALUES(?1,?2,?3)",
+	_, err := t.db.Exec(fmt.Sprintf("REPLACE INTO %s(k,v,updated_at) VALUES(?1,?2,?3)", t.name),
 		key, fmt.Sprint(val), t.options.Clock.Now())
 	t.mu.Unlock()
 	return err
@@ -57,7 +63,7 @@ func (t *KVTable) SaveInt64(key string, val int64) error {
 func (t *KVTable) Int64(key string) (int64, error) {
 	var v string
 	t.mu.RLock()
-	err := t.db.QueryRow("SELECT v FROM kv WHERE k=?", key).Scan(&v)
+	err := t.db.QueryRow(fmt.Sprintf("SELECT v FROM %s WHERE k=?", t.name), key).Scan(&v)
 	t.mu.RUnlock()
 	if err != nil {
 		return 0, err
@@ -84,7 +90,7 @@ func (t *KVTable) String(key string) (string, error) {
 
 func (t *KVTable) SaveBytes(key string, data []byte) error {
 	t.mu.Lock()
-	_, err := t.db.Exec("REPLACE INTO kv(k,v,updated_at) VALUES(?1,?2,?3)", key, data, t.options.Clock.Now())
+	_, err := t.db.Exec(fmt.Sprintf("REPLACE INTO %s(k,v,updated_at) VALUES(?1,?2,?3)", t.name), key, data, t.options.Clock.Now())
 	t.mu.Unlock()
 	return err
 }
@@ -92,7 +98,7 @@ func (t *KVTable) SaveBytes(key string, data []byte) error {
 func (t *KVTable) Bytes(key string) ([]byte, error) {
 	var v []byte
 	t.mu.RLock()
-	err := t.db.QueryRow("SELECT v FROM kv WHERE k=?", key).Scan(&v)
+	err := t.db.QueryRow(fmt.Sprintf("SELECT v FROM %s WHERE k=?", t.name), key).Scan(&v)
 	t.mu.RUnlock()
 	if err != nil {
 		return nil, fmt.Errorf("query: %w", err)
@@ -107,9 +113,9 @@ func (t *KVTable) SaveObject(key string, obj any) error {
 	}
 	t.mu.Lock()
 	if obj == nil {
-		_, err = t.db.Exec("DELETE FROM kv WHERE k=?1", key)
+		_, err = t.db.Exec(fmt.Sprintf("DELETE FROM %s WHERE k=?1", t.name), key)
 	} else {
-		_, err = t.db.Exec("REPLACE INTO kv(k,v,updated_at) VALUES(?1,?2,?3)", key, data, t.options.Clock.Now())
+		_, err = t.db.Exec(fmt.Sprintf("REPLACE INTO %s(k,v,updated_at) VALUES(?1,?2,?3)", t.name), key, data, t.options.Clock.Now())
 	}
 	t.mu.Unlock()
 	return err
@@ -118,7 +124,7 @@ func (t *KVTable) SaveObject(key string, obj any) error {
 func (t *KVTable) GetObject(key string, ptrToObj any) error {
 	var data []byte
 	t.mu.RLock()
-	err := t.db.QueryRow("SELECT v FROM kv WHERE k=?", key).Scan(&data)
+	err := t.db.QueryRow(fmt.Sprintf("SELECT v FROM %s WHERE k=?", t.name), key).Scan(&data)
 	t.mu.RUnlock()
 	if err != nil {
 		return err
@@ -129,9 +135,9 @@ func (t *KVTable) GetObject(key string, ptrToObj any) error {
 func (t *KVTable) ListKeys(prefix string) ([]string, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	query := "SELECT k FROM kv"
+	query := "SELECT k FROM " + t.name
 	if prefix != "" {
-		query = "SELECT k FROM kv WHERE k LIKE '" + prefix + "%'"
+		query += " WHERE k LIKE '" + prefix + "%'"
 	}
 	rows, err := t.db.Query(query)
 	if err != nil {
@@ -152,14 +158,14 @@ func (t *KVTable) ListKeys(prefix string) ([]string, error) {
 
 func (t *KVTable) Delete(key string) error {
 	t.mu.Lock()
-	_, err := t.db.Exec("DELETE FROM kv WHERE k=?", key)
+	_, err := t.db.Exec(fmt.Sprintf("DELETE FROM %s WHERE k=?", t.name), key)
 	t.mu.Unlock()
 	return err
 }
 
 func (t *KVTable) DeleteWithPrefix(prefix string) error {
 	t.mu.Lock()
-	_, err := t.db.Exec("DELETE FROM kv WHERE k like '" + prefix + "%'")
+	_, err := t.db.Exec(fmt.Sprintf("DELETE FROM %s WHERE k like '%s%%'", t.name, prefix))
 	t.mu.Unlock()
 	return err
 }
@@ -167,7 +173,7 @@ func (t *KVTable) DeleteWithPrefix(prefix string) error {
 func (t *KVTable) Exists(key string) (bool, error) {
 	t.mu.RLock()
 	var exists bool
-	err := t.db.QueryRow("SELECT EXISTS(SELECT * FROM kv WHERE k=?)", key).Scan(&exists)
+	err := t.db.QueryRow(fmt.Sprintf("SELECT EXISTS(SELECT * FROM %s WHERE k=?)", t.name), key).Scan(&exists)
 	t.mu.RUnlock()
 	return exists, err
 }
