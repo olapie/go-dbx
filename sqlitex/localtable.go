@@ -10,11 +10,10 @@ import (
 	"log"
 	"strings"
 
+	"github.com/hashicorp/golang-lru/v2"
 	"go.olapie.com/security"
 	"go.olapie.com/times"
 	"go.olapie.com/utils"
-
-	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 const (
@@ -44,12 +43,15 @@ func NewLocalTable[R any](db *sql.DB, optFns ...func(*LocalTableOptions[R])) *Lo
 	t := &LocalTable[R]{
 		db: db,
 	}
+
 	t.options.LocalCacheSize = defaultLocalTableCacheSize
 	t.options.RemoteCacheSize = defaultLocalTableCacheSize
 	t.options.DeletionCacheSize = defaultLocalTableCacheSize
+
 	for _, fn := range optFns {
 		fn(&t.options)
 	}
+
 	if t.options.Clock == nil {
 		t.options.Clock = times.LocalClock{}
 	}
@@ -79,6 +81,7 @@ func NewLocalTable[R any](db *sql.DB, optFns ...func(*LocalTableOptions[R])) *Lo
     update_time INTEGER,
     synced BOOL DEFAULT FALSE
 )`))
+
 	MustGet(db.Exec(`CREATE TABLE IF NOT EXISTS locals(
     id VARCHAR PRIMARY KEY,
     category INTEGER DEFAULT 0,
@@ -86,6 +89,7 @@ func NewLocalTable[R any](db *sql.DB, optFns ...func(*LocalTableOptions[R])) *Lo
     create_time INTEGER,
     update_time INTEGER
 )`))
+
 	MustGet(db.Exec(`CREATE TABLE IF NOT EXISTS deletions(
     id VARCHAR PRIMARY KEY,
     category INTEGER DEFAULT 0,
@@ -99,7 +103,7 @@ func NewLocalTable[R any](db *sql.DB, optFns ...func(*LocalTableOptions[R])) *Lo
 func (t *LocalTable[R]) SaveRemote(ctx context.Context, localID string, category int, record R, updateTime int64) error {
 	// check delete_record, if it's deleted, then ignore
 	// if updateTime < remotes.updateTime, then ignore
-	// save: localID, recordData, udpateTime(new), synced(true)
+	// save: localID, recordData, updateTime(new), synced(true)
 	exists, _ := t.deletionCache.Get(localID)
 	if !exists {
 		err := t.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT * FROM deletions WHERE id=?)`, localID).Scan(&exists)
@@ -120,7 +124,7 @@ func (t *LocalTable[R]) SaveRemote(ctx context.Context, localID string, category
 	}
 
 	if exists {
-		log.Println("Don't overwrite newly updated local record", localID)
+		log.Println("ignore outdated remote record", localID)
 		return nil
 	}
 
@@ -138,7 +142,7 @@ func (t *LocalTable[R]) SaveRemote(ctx context.Context, localID string, category
 
 	_, err = t.db.ExecContext(ctx, `DELETE FROM locals WHERE id=? AND update_time<=?`, localID, updateTime)
 	if err != nil {
-		return fmt.Errorf("delete from locals: %s, %w", localID, err)
+		return fmt.Errorf("delete locals: %s, %w", localID, err)
 	}
 	t.localCache.Remove(localID)
 
@@ -155,7 +159,7 @@ func (t *LocalTable[R]) SaveLocal(ctx context.Context, localID string, category 
 	_, err = t.db.ExecContext(ctx, `REPLACE INTO locals(id,category, data, update_time) VALUES(?,?,?,?)`,
 		localID, category, data, t.options.Clock.Now().Unix())
 	if err != nil {
-		return fmt.Errorf("replace into remotes: %s,%w", localID, err)
+		return fmt.Errorf("replace into locals: %s, %w", localID, err)
 	}
 	t.localCache.Add(localID, record)
 	return nil
@@ -167,7 +171,7 @@ func (t *LocalTable[R]) Delete(ctx context.Context, localID string) error {
 	// save in delete_record
 	_, err := t.db.ExecContext(ctx, `DELETE FROM locals WHERE id=?`, localID)
 	if err != nil {
-		return fmt.Errorf("delete from locals: %s, %w", localID, err)
+		return fmt.Errorf("delete locals: %s, %w", localID, err)
 	}
 	t.localCache.Remove(localID)
 
@@ -191,7 +195,7 @@ func (t *LocalTable[R]) Delete(ctx context.Context, localID string) error {
 
 		_, err = t.db.ExecContext(ctx, `DELETE FROM remotes WHERE id=?`, localID)
 		if err != nil {
-			return fmt.Errorf("delete from remotes: %s, %w", localID, err)
+			return fmt.Errorf("delete remotes: %s, %w", localID, err)
 		}
 		t.remoteCache.Remove(localID)
 	}
@@ -204,15 +208,21 @@ func (t *LocalTable[R]) Update(ctx context.Context, localID string, record R) er
 		return fmt.Errorf("encode record: %w", err)
 	}
 
-	if isRemote, err := t.IsRemote(ctx, localID); err != nil {
-		return fmt.Errorf("failed xcheck remote: %w", err)
-	} else if isRemote {
+	isRemote, err := t.IsRemote(ctx, localID)
+	if err != nil {
+		return fmt.Errorf("is remote: %w", err)
+	}
+
+	if isRemote {
 		return t.updateRemote(ctx, localID, record, &data)
 	}
 
-	if isLocal, err := t.IsRemote(ctx, localID); err != nil {
-		return fmt.Errorf("failed xcheck remote: %w", err)
-	} else if isLocal {
+	isLocal, err := t.IsLocal(ctx, localID)
+	if err != nil {
+		return fmt.Errorf("is local: %w", err)
+	}
+
+	if isLocal {
 		return t.updateLocal(ctx, localID, record, &data)
 	}
 
@@ -261,14 +271,15 @@ func (t *LocalTable[R]) List(ctx context.Context, categories ...int) ([]R, error
 			where = fmt.Sprintf("category in (%s)", joinedCategories)
 		}
 	}
+
 	remoteIDs, remotes, err := t.list(ctx, "remotes", where)
 	if err != nil {
-		return nil, fmt.Errorf("failed listing remotes: %w", err)
+		return nil, fmt.Errorf("list remotes: %w", err)
 	}
 
 	localIDs, locals, err := t.list(ctx, "locals", where)
 	if err != nil {
-		return nil, fmt.Errorf("failed listing locals: %w", err)
+		return nil, fmt.Errorf("list locals: %w", err)
 	}
 
 	ids := make(map[string]bool, len(remoteIDs)+len(localIDs))
@@ -298,12 +309,12 @@ func (t *LocalTable[R]) ListExclusive(ctx context.Context, categories ...int) ([
 	}
 	remoteIDs, remotes, err := t.list(ctx, "remotes", where)
 	if err != nil {
-		return nil, fmt.Errorf("failed listing remotes: %w", err)
+		return nil, fmt.Errorf("list remotes: %w", err)
 	}
 
 	localIDs, locals, err := t.list(ctx, "locals", where)
 	if err != nil {
-		return nil, fmt.Errorf("failed listing locals: %w", err)
+		return nil, fmt.Errorf("list locals: %w", err)
 	}
 
 	ids := make(map[string]bool, len(remoteIDs)+len(localIDs))
