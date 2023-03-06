@@ -3,13 +3,13 @@ package sqlitex
 import (
 	"context"
 	"fmt"
-	"go.olapie.com/utils"
 	"math/rand"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"go.olapie.com/utils"
 )
 
 type localTableItem struct {
