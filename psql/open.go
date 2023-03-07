@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"net/url"
 	"os/user"
 	"sync"
+
+	"go.olapie.com/log"
 )
 
 type OpenOptions struct {
@@ -32,7 +33,6 @@ func (c *OpenOptions) String() string {
 	if c.UnixSocket {
 		u, err := user.Current()
 		if err != nil {
-			log.Println(err)
 			return ""
 		}
 		if c.Schema == "" {
@@ -77,58 +77,66 @@ func (c *OpenOptions) String() string {
 	return connStr + "?" + query.Encode()
 }
 
-func Open(options *OpenOptions) (*sql.DB, error) {
+func Open(ctx context.Context, options *OpenOptions) (*sql.DB, error) {
 	if options == nil {
 		options = NewOpenOptions()
 	}
 	connString := options.String()
+	logger := log.FromContext(ctx)
+	logger.Info("opening postgres",
+		log.String("user", options.User),
+		log.String("database", options.Database),
+		log.String("schema", options.Schema),
+		log.Bool("unix_socket", options.UnixSocket))
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
 		return nil, fmt.Errorf("open: %s, %w", connString, err)
 	}
 
-	err = db.Ping()
+	err = db.PingContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("ping: %s, %w", connString, err)
 	}
+	logger.Info("opening postgres",
+		log.String("user", options.User),
+		log.String("database", options.Database),
+		log.String("schema", options.Schema),
+		log.Bool("unix_socket", options.UnixSocket))
 	return db, nil
 }
 
-func MustOpen(options *OpenOptions) *sql.DB {
-	return MustGet(Open(options))
+func MustOpen(ctx context.Context, options *OpenOptions) *sql.DB {
+	return MustGet(Open(ctx, options))
 }
 
-func OpenLocal() (*sql.DB, error) {
-	if db, err := Open(&OpenOptions{UnixSocket: true}); err == nil {
-		log.Println("Connected via unix socket")
+func OpenLocal(ctx context.Context) (*sql.DB, error) {
+	if db, err := Open(ctx, &OpenOptions{UnixSocket: true}); err == nil {
 		return db, nil
 	}
-	db, err := Open(NewOpenOptions())
-	if err == nil {
-		log.Println("Connected via tcp socket")
-	}
-	return db, err
+	return Open(ctx, NewOpenOptions())
 }
 
-func MustOpenLocal() *sql.DB {
-	return MustGet(OpenLocal())
+func MustOpenLocal(ctx context.Context) *sql.DB {
+	return MustGet(OpenLocal(ctx))
 }
 
-type Factory[T any] interface {
-	Get(ctx context.Context, repoID string) T
+var connStringToDBCache sync.Map
+
+type RepoFactory[T any] interface {
+	Get(ctx context.Context, schema string) T
 }
 
 type NewRepoFunc[T any] func(ctx context.Context, db *sql.DB) T
 
-type factoryImpl[T any] struct {
+type repoFactoryImpl[T any] struct {
 	mu      sync.RWMutex
 	cache   map[string]T
 	options *OpenOptions
 	fn      NewRepoFunc[T]
 }
 
-func NewFactory[T any](options *OpenOptions, fn NewRepoFunc[T]) Factory[T] {
-	f := &factoryImpl[T]{
+func NewRepoFactory[T any](options *OpenOptions, fn NewRepoFunc[T]) RepoFactory[T] {
+	f := &repoFactoryImpl[T]{
 		options: options,
 		cache:   make(map[string]T),
 		fn:      fn,
@@ -136,25 +144,33 @@ func NewFactory[T any](options *OpenOptions, fn NewRepoFunc[T]) Factory[T] {
 	return f
 }
 
-func (f *factoryImpl[T]) Get(ctx context.Context, repoID string) T {
+func (f *repoFactoryImpl[T]) Get(ctx context.Context, schema string) T {
 	f.mu.RLock()
-	r, ok := f.cache[repoID]
+	repo, ok := f.cache[schema]
 	f.mu.RUnlock()
 	if ok {
-		return r
+		return repo
 	}
 
 	f.mu.Lock()
-	r, ok = f.cache[repoID]
-	if !ok {
-		opt := *f.options
-		opt.Schema = repoID
-		db := MustOpen(&opt)
-		r = f.fn(ctx, db)
-		f.cache[repoID] = r
+	defer f.mu.Unlock()
+	repo, ok = f.cache[schema]
+	if ok {
+		return repo
 	}
-	f.mu.Unlock()
-	return r
+
+	opt := *f.options
+	opt.Schema = schema
+	connStr := opt.String()
+	if dbVal, ok := connStringToDBCache.Load(connStr); ok {
+		repo = f.fn(ctx, dbVal.(*sql.DB))
+	} else {
+		db := MustOpen(ctx, &opt)
+		connStringToDBCache.Store(connStr, db)
+		repo = f.fn(ctx, db)
+	}
+	f.cache[schema] = repo
+	return repo
 }
 
 // MustGet eliminates nil err and panics if err isn't nil
