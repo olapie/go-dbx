@@ -59,7 +59,6 @@ id %s PRIMARY KEY,
 data BLOB,
 updated_at BIGINT
 )`, name, typ)
-	fmt.Println(query)
 	_, err := db.Exec(query)
 	if err != nil {
 		return nil, err
