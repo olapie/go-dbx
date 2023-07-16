@@ -4,11 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"go.olapie.com/logs"
+	"log/slog"
 	"net/url"
 	"os/user"
 	"sync"
-
-	"go.olapie.com/log"
 )
 
 type OpenOptions struct {
@@ -82,12 +82,12 @@ func Open(ctx context.Context, options *OpenOptions) (*sql.DB, error) {
 		options = NewOpenOptions()
 	}
 	connString := options.String()
-	logger := log.FromContext(ctx)
+	logger := logs.FromCtx(ctx)
 	logger.Info("opening postgres",
-		log.String("user", options.User),
-		log.String("database", options.Database),
-		log.String("schema", options.Schema),
-		log.Bool("unix_socket", options.UnixSocket))
+		slog.String("user", options.User),
+		slog.String("database", options.Database),
+		slog.String("schema", options.Schema),
+		slog.Bool("unix_socket", options.UnixSocket))
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
 		return nil, fmt.Errorf("open: %s, %w", connString, err)
@@ -98,10 +98,10 @@ func Open(ctx context.Context, options *OpenOptions) (*sql.DB, error) {
 		return nil, fmt.Errorf("ping: %s, %w", connString, err)
 	}
 	logger.Info("opening postgres",
-		log.String("user", options.User),
-		log.String("database", options.Database),
-		log.String("schema", options.Schema),
-		log.Bool("unix_socket", options.UnixSocket))
+		slog.String("user", options.User),
+		slog.String("database", options.Database),
+		slog.String("schema", options.Schema),
+		slog.Bool("unix_socket", options.UnixSocket))
 	return db, nil
 }
 
