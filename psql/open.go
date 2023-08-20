@@ -4,11 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"go.olapie.com/logs"
 	"log/slog"
 	"net/url"
 	"os/user"
 	"sync"
+
+	"go.olapie.com/logs"
 )
 
 type OpenOptions struct {

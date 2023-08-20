@@ -3,12 +3,13 @@ package sqlitex
 import (
 	"database/sql"
 	"errors"
-	"github.com/google/uuid"
-	_ "github.com/mattn/go-sqlite3"
-	"go.olapie.com/utils"
 	"math/rand"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
+	"go.olapie.com/utils"
 )
 
 func createTable[K SimpleKey, R any](t *testing.T, pkFn func(R) K) *SimpleTable[K, R] {
