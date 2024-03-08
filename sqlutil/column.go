@@ -1,13 +1,12 @@
 package sqlutil
 
 import (
+	"go.olapie.com/naming"
 	"reflect"
 	"regexp"
 	"strings"
 	"sync"
 	"unsafe"
-
-	"go.olapie.com/utils"
 )
 
 var _regexpVariable = regexp.MustCompile("^[_a-zA-Z]\\w*$")
@@ -133,7 +132,7 @@ func parseColumnInfo(typ reflect.Type) *columnInfo {
 		}
 
 		if len(name) == 0 {
-			name = utils.ToSnake(f.Name)
+			name = naming.ToSnake(f.Name)
 		}
 
 		if idx, found := info.nameToIndex[name]; found {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"go.olapie.com/naming"
 	"log"
 	"reflect"
 	"strings"
@@ -50,14 +51,14 @@ func getTableNameByType(typ reflect.Type) string {
 		return reflect.Zero(typ).Interface().(tableNamer).TableName()
 	}
 
-	if reflect.PtrTo(typ).Implements(_tableNamerType) {
+	if reflect.PointerTo(typ).Implements(_tableNamerType) {
 		// Pointer receiver may be dereferenced during TableName method call
 		// New its elem value in order to make pointer non-nil
 		return reflect.New(typ).Interface().(tableNamer).TableName()
 		//return reflect.Zero(reflect.PtrTo(typ)).Interface().(tableNamer).TableName()
 	}
 
-	return utils.Plural(utils.ToSnake(typ.Name()))
+	return naming.Plural(naming.ToSnake(typ.Name()))
 }
 
 type Table struct {

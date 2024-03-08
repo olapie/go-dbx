@@ -69,7 +69,7 @@ func (t *KVTable) Int64(key string) (int64, error) {
 		return 0, err
 	}
 
-	n, err := utils.ToInt64(v)
+	n, err := conv.ToInt64(v)
 	if err != nil {
 		return 0, err
 	}

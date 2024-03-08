@@ -4,9 +4,8 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"go.olapie.com/conv"
 	"math/big"
-
-	"go.olapie.com/utils"
 )
 
 type BigInt big.Int
@@ -21,7 +20,7 @@ func (i *BigInt) Scan(src any) error {
 		return nil
 	}
 
-	s, err := utils.ToString(src)
+	s, err := conv.ToString(src)
 	if err != nil {
 		return fmt.Errorf("cannot parse %v into big.Int", src)
 	}

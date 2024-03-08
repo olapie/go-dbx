@@ -5,9 +5,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"go.olapie.com/conv"
 	"reflect"
-
-	"go.olapie.com/utils"
 )
 
 func JSON(v any) any {
@@ -35,7 +34,7 @@ func (j *jsonHolder) Scan(src any) error {
 		return nil
 	}
 
-	b, err := utils.ToBytes(src)
+	b, err := conv.ToBytes(src)
 	if err != nil {
 		return fmt.Errorf("parse bytes: %w", err)
 	}
