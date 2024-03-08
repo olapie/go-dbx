@@ -6,7 +6,6 @@ toolchain go1.22.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/hashicorp/golang-lru v1.0.2
 	github.com/mattn/go-sqlite3 v1.14.16
 	go.olapie.com/dbx v1.1.0
 	go.olapie.com/security v0.2.2
@@ -16,6 +15,7 @@ require (
 
 require (
 	github.com/google/go-cmp v0.6.0 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	go.olapie.com/conv v1.3.4 // indirect
 	go.olapie.com/naming v0.3.0 // indirect
 	golang.org/x/crypto v0.21.0 // indirect

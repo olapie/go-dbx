@@ -10,7 +10,7 @@ import (
 	"log"
 	"strings"
 
-	lru "github.com/hashicorp/golang-lru"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"go.olapie.com/security"
 	"go.olapie.com/times"
 	"go.olapie.com/utils"
