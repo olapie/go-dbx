@@ -11,13 +11,9 @@ import (
 func Open(fileName string) (*sql.DB, error) {
 	dirname := filepath.Dir(fileName)
 	if fi, err := os.Stat(dirname); err != nil {
-		if err == os.ErrNotExist {
-			err := os.MkdirAll(dirname, 0755)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, err
+		mkDirErr := os.MkdirAll(dirname, 0755)
+		if mkDirErr != nil {
+			return nil, fmt.Errorf("mkdir: %w, %w", mkDirErr, err)
 		}
 	} else if !fi.IsDir() {
 		return nil, errors.New(dirname + " is not a directory")
